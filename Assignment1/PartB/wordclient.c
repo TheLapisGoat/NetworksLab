@@ -73,7 +73,6 @@ int main(int argc, char *argv[]) {
 
     //Create a new file with a different name from the file requested from server
     FILE *fp = fopen(newfilename, "w");    // fopen() creates a new file and opens it in write mode 
-    fprintf(fp, "%s\n", buffer);    // fprintf() writes the contents of buffer to the file (In this case, "HELLO")
 
     int count = 1;
     while (1) {
@@ -84,7 +83,6 @@ int main(int argc, char *argv[]) {
 
         //If the received word is END, exit
         if (strcmp((const char *) buffer, "END") == 0) {
-            fprintf(fp, "%s", buffer);
             break;
         }
 
