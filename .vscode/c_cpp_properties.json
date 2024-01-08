@@ -1,0 +1,16 @@
+{
+    "configurations": [
+        {
+            "compilerPath": "/usr/bin/gcc",
+            "cStandard": "c17",
+            "cppStandard": "gnu++17",
+            "intelliSenseMode": "linux-gcc-x64",
+            "defines": [
+                "__linux__",
+                "__x86_64__",
+                "_GNU_SOURCE"
+            ]
+        }
+    ],
+    "version": 4
+}
