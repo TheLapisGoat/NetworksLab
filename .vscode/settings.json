@@ -8,7 +8,8 @@
         "in.h": "c",
         "netdb.h": "c",
         "exception": "c",
-        "sstream": "c"
+        "sstream": "c",
+        "stdlib.h": "c"
     },
     "C_Cpp.errorSquiggles": "enabled"
 }

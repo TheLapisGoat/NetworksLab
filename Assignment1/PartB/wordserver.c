@@ -7,7 +7,7 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 
-#define SERVERPORT 20010    // SERVERPORT is the port number of the server
+#define SERVERPORT 20000    // SERVERPORT is the port number of the server
 
 #define MAXLINE 1024        // MAXLINE is the maximum number of bytes that can be received at once
 
@@ -68,10 +68,6 @@ int main(int argc, char *argv[]) {
 
         fclose(file);   // fclose() closes the file
     }
-
-    // //Print client details
-    // printf("Client IP: %s\n", inet_ntoa(cliaddr.sin_addr));
-    // printf("Client Port: %d\n", ntohs(cliaddr.sin_port));
 
     close(sockfd);                            // close() closes the socket file descriptor
     return 0;

@@ -8,8 +8,8 @@
 #include <netinet/in.h>
 
 
-#define SERVERPORT 20010
-#define CLIENTPORT 20011
+#define SERVERPORT 20000
+#define CLIENTPORT 20001
 
 #define MAXLINE 1024
 
@@ -47,7 +47,7 @@ int main(int argc, char *argv[]) {
     servaddr.sin_addr.s_addr = INADDR_ANY;      // INADDR_ANY is the IP address of the host
 
     cliaddr.sin_family = AF_INET;       // AF_INET is the IPv4 protocol
-    cliaddr.sin_port = htons(20011);     // htons() converts the port number from host byte order to network byte order
+    cliaddr.sin_port = htons(CLIENTPORT);     // htons() converts the port number from host byte order to network byte order
     cliaddr.sin_addr.s_addr = INADDR_ANY;    // INADDR_ANY is the IP address of the host
 
     // Bind the socket with the client address
