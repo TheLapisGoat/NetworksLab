@@ -11,7 +11,7 @@
 #define SERVERPORT 20004
 
 int main() {
-    char buf[100], dec_filename[100];
+    char buf[100], dec_filename[100];   //Buffer to store the file contents and the file name
     int fd;             //File descriptor
     int k;              //k for Caesar cipher
     int n;              //Number of bytes read
@@ -80,6 +80,7 @@ int main() {
             write(enc_fd, buf, strlen(buf));
             memset(buf, 0, sizeof(buf));
             if (buf[n - 1] == '\n') {
+                write(enc_fd, "\n", 1);
                 break;
             }
         }
