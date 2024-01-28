@@ -5,6 +5,7 @@
 #include <netinet/in.h>
 
 int smtp_state;      //0: Expecting a response from the server, 1: Expected to send a command to the server
+int sockfd ;                                                    //Socket file descriptor
 
 int main(int argc, char * argv[]) {
     //Doing an argument check
@@ -58,7 +59,6 @@ int main(int argc, char * argv[]) {
 }
 
 void send_mail(char * server_ip, int smtp_port) {
-    int sockfd ;                                                    //Socket file descriptor
     struct sockaddr_in serv_addr;                                   //Server address
 
     if ((sockfd = socket(PF_INET, SOCK_STREAM, 0)) < 0) {           //Creating a socket
@@ -76,14 +76,65 @@ void send_mail(char * server_ip, int smtp_port) {
         exit(0);
     }
 
-    char buffer[1024];                                              //Buffer to store the data (1001 characters is the limit of a text line in an email, Pg 43)
-
     while (1) {
-        if (smtp_state == 0) {       //Expecting a response from the server
-            
-
+        if (smtp_state == 0) {                                      //Expecting a response from the server
+            get_smtp_response();                              //Get the response
         } else if (smtp_state == 1) {
 
         }
     }
+}
+
+void get_smtp_response() {                         //Function to process the response from the server.
+    /* Definition of a line:  Lines consist of zero or more data characters terminated by the sequence ASCII character "CR" (hex value 0D) followed immediately by ASCII character "LF" (hex value 0A).
+    SMTP client MUST NOT send CR or LF unless sending <CRLF> as line terminator. RFC 5321, pg 13 */
+    /* All SMTP responses are of 2 forms (RFC 5321, pg 49):
+    1. Single Line: <3-digit-code> <SP> <message> <CRLF>
+    2. Multi Line: <3-digit-code> <Hyphen> <line>                //I'm assuming by line, they mean the above definition of a line
+    Ended by the line: <3-digit-code> <SP> <message> <CRLF>     //servers SHOULD send the <SP> if subsequent text is not sent, but clients MUST be prepared for it to be omitted.
+    */
+    /*
+    The maximum total length of a reply line including the reply code and the <CRLF> is 512 octets. RFC 5321, pg 62
+    */
+
+    //Each of the reply lines may not come in a single packet, so we need to keep reading until we get a <CRLF> at the end of the line.
+
+    int response_code = 0;      //Variable to store the response code
+    int continue_reading = 1;
+
+    char complete_line[1024];          //Buffer to store a complete line of text (1001 characters is the limit of a text line in an email, rfc 821, Pg 43)
+    char buffer[1024];                 //Buffer to store the data (1001 characters is the limit of a text line in an email, rfc 821, Pg 43)
+    memset(buffer, 0, sizeof(buffer));     //Setting the buffer to 0
+    memset(complete_line, 0, sizeof(complete_line));     //Setting the buffer to 0
+
+    while (1) {
+        int bytes_read = read(sockfd, buffer, sizeof(buffer));     //Reading the data from the socket
+
+        char * line_end = strstr(buffer, "\r\n");     //Finding the <CRLF>
+
+        if (line_end == NULL) {     //If the <CRLF> is not found
+            strcat(complete_line, buffer);      //Append the buffer to the complete line
+            memset(buffer, 0, sizeof(buffer));     //Setting the buffer to 0
+            continue;       //Continue reading
+        }
+
+        while (line_end != NULL) {      //If the <CRLF> is found
+            strncat(complete_line, buffer, line_end - buffer);      //Append the buffer to the complete line
+            memmove(buffer, line_end + 2, sizeof(buffer) - (line_end - buffer) - 2);    //Move the remaining data to the start of the buffer
+
+            if (complete_line[3] == '-') {      //If the line is a multi line response
+                memset(complete_line, 0, sizeof(complete_line));     //Setting the buffer to 0
+                line_end = strstr(buffer, "\r\n");     //Finding the next <CRLF>
+                continue;       //Continue reading
+            } else {        //If the line is a single line response or it is the last line of a multi line response
+                response_code = (complete_line[0] - '0') * 100 + (complete_line[1] - '0') * 10 + (complete_line[2] - '0');  //Calculating the response code
+                break;      //Break out of the loop
+            }
+        }
+
+        if (!continue_reading) {        //If we have read the full message
+            break;      //Break out of the loop
+        }
+    }
+
 }
