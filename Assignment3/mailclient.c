@@ -230,7 +230,7 @@ void get_smtp_response() {                         //Function to process the res
             } else if (commd_state == 2) {
                 commd_state = 3;    //Send DATA
             } else if (commd_state == 4) {
-                //Now that OK has been received, the rest of the mail is in the hands of the server.
+                //Now that OK has been received, the rest of the mail is in the hands of the server. rfc 5321, pg 37
                 printf("“Mail sent successfully”\n");
                 commd_state = -1;    //Send QUIT
             }
