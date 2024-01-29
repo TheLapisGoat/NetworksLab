@@ -3,9 +3,16 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <zconf.h>
+#include <arpa/inet.h>
 
 int smtp_state;      //0: Expecting a response from the server, 1: Expected to send a command to the server
+int commd_state;     //0: Send HELO, 1: Send MAIL FROM, 2: Send RCPT TO, 3: Send DATA, 4: Send QUIT
 int sockfd ;                                                    //Socket file descriptor
+
+void send_mail(char * server_ip, int smtp_port);                //Function to send mail
+void get_smtp_response();                                       //Function to process the response from the server.
+void send_smtp_command();                                       //Function to send the command to the server
 
 int main(int argc, char * argv[]) {
     //Doing an argument check
@@ -26,6 +33,7 @@ int main(int argc, char * argv[]) {
 
     printf("Enter your username: ");
     scanf("%s", username);
+    printf("%s", username);
     printf("Enter your password: ");
     scanf("%s", password);
 
@@ -46,6 +54,7 @@ int main(int argc, char * argv[]) {
             }
             case 2: {       //Send Mail
                 smtp_state = 0;
+                commd_state = 0;
                 send_mail(server_ip, smtp_port);
                 break;
             }
@@ -80,7 +89,7 @@ void send_mail(char * server_ip, int smtp_port) {
         if (smtp_state == 0) {                                      //Expecting a response from the server
             get_smtp_response();                              //Get the response
         } else if (smtp_state == 1) {
-
+            send_smtp_command();                              //Send the command
         }
     }
 }
@@ -90,7 +99,7 @@ void get_smtp_response() {                         //Function to process the res
     SMTP client MUST NOT send CR or LF unless sending <CRLF> as line terminator. RFC 5321, pg 13 */
     /* All SMTP responses are of 2 forms (RFC 5321, pg 49):
     1. Single Line: <3-digit-code> <SP> <message> <CRLF>
-    2. Multi Line: <3-digit-code> <Hyphen> <line>                //I'm assuming by line, they mean the above definition of a line
+    2. Multi Line: <3-digit-code> <Hyphen> <line>                //I'm assuming by line, they mean the above definition of a line  //Update: RFC 5321 pg 32 has an example of the multiline response, which follows what I've written here.
     Ended by the line: <3-digit-code> <SP> <message> <CRLF>     //servers SHOULD send the <SP> if subsequent text is not sent, but clients MUST be prepared for it to be omitted.
     */
     /*
@@ -128,6 +137,7 @@ void get_smtp_response() {                         //Function to process the res
                 continue;       //Continue reading
             } else {        //If the line is a single line response or it is the last line of a multi line response
                 response_code = (complete_line[0] - '0') * 100 + (complete_line[1] - '0') * 10 + (complete_line[2] - '0');  //Calculating the response code
+                continue_reading = 0;       //We have read the full message
                 break;      //Break out of the loop
             }
         }
@@ -137,4 +147,32 @@ void get_smtp_response() {                         //Function to process the res
         }
     }
 
+    switch (response_code) {    //Switch case to process the response code
+        case 220: {     //Service Ready
+            printf("Service Ready\n");              //For debugging purposes
+            smtp_state = 1;     //Expecting a command from the client
+            commd_state = 0;    //Send HELO
+            break;
+        }
+        default: {
+            printf("Unknown response code: %d\n", response_code);
+            exit(0);
+        }
+    }
+}
+
+void send_hello() {     //Function to send HELO
+    /* HELO syntax: rfc 821, pg */
+    char * hello = "HELO sussus-amongus.kgpian.edu.in\r\n";      //Command to send
+    send(sockfd, hello, strlen(hello), 0);      //Sending the command
+    smtp_state = 0;     //Expecting a response from the server
+}
+
+void send_smtp_command() {      //Function to send the command to the server
+    switch (commd_state) {
+        case 0: {       //Send HELO
+            send_hello();
+            break;
+        }
+    }
 }
