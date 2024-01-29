@@ -5,14 +5,46 @@
 #include <netinet/in.h>
 #include <zconf.h>
 #include <arpa/inet.h>
+#include <ctype.h>
 
 int smtp_state;      //0: Expecting a response from the server, 1: Expected to send a command to the server
-int commd_state;     //0: Send HELO, 1: Send MAIL FROM, 2: Send RCPT TO, 3: Send DATA, 4: Send QUIT
+int commd_state;     //0: Send HELO, 1: Send MAIL FROM, 2: Send RCPT TO, 3: Send DATA, -1: Send QUIT
 int sockfd ;                                                    //Socket file descriptor
+char username[80];         
+
+
+//Following variables are for Option 2: Send Mail
+char username_sender[80];   //Upper limit of username (local part) is 64 bytes, rfc 5321, pg 63
+char domain_sender[300];           //Upper limit of domain is 255 bytes, rfc 5321, pg 63
+char username_recipient[80];   //Upper limit of username (local part) is 64 bytes, rfc 5321, pg 63
+char domain_recipient[300];           //Upper limit of domain is 255 bytes, rfc 5321, pg 63
+char subject[100];           //Upper limit of subject is 50 bytes, assignment
+char message[5000];          //Upper limit of message is 4000 bytes, assignment: You can assume that no single line in the message body has more than 80 characters and the maximum no. of lines in the message is 50.
+
 
 void send_mail(char * server_ip, int smtp_port);                //Function to send mail
 void get_smtp_response();                                       //Function to process the response from the server.
 void send_smtp_command();                                       //Function to send the command to the server
+
+char *strstrip(char *s) {         //Helper function to strip the string of leading and trailing whitespaces
+        size_t size;
+        char *end;
+
+        size = strlen(s);
+
+        if (!size)
+                return s;
+
+        end = s + size - 1;
+        while (end >= s && isspace(*end))
+                end--;
+        *(end + 1) = '\0';
+
+        while (*s && isspace(*s))
+                s++;
+
+        return s;
+}
 
 int main(int argc, char * argv[]) {
     //Doing an argument check
@@ -28,14 +60,17 @@ int main(int argc, char * argv[]) {
     int smtp_port = atoi(argv[2]);      //Port number of the SMTP server
     int pop3_port = atoi(argv[3]);      //Port number of the POP3 server
 
-    char username[260];         //Upper limit of a useful address is 254 characters, https://www.rfc-editor.org/errata/eid1690#:~:text=It%20should%20say%3A,total%20length%20of%20320%20characters.
     char password[260];         //Don't know the upper limit of password, nor do I know where we will be using it.
 
+    memset(username, 0, sizeof(username));     //Setting the buffer to 0
+    memset(password, 0, sizeof(password));     //Setting the buffer to 0
+
     printf("Enter your username: ");
-    scanf("%s", username);
-    printf("%s", username);
+    fgets(username, sizeof(username), stdin);
+    strstrip(username);     //Stripping the username of leading and trailing whitespaces
     printf("Enter your password: ");
-    scanf("%s", password);
+    fgets(password, sizeof(password), stdin);
+    strstrip(password);     //Stripping the password of leading and trailing whitespaces
 
     while (1) {
         //Displaying the menu
@@ -45,7 +80,11 @@ int main(int argc, char * argv[]) {
         printf("3. Quit\n");
 
         int choice;                     //Variable to store the choice of the user
-        scanf("%d", &choice);           //Taking the choice of the user
+        char temp_choice[10];           //Buffer to store the choice of the user
+        memset(temp_choice, 0, sizeof(temp_choice));     //Setting the buffer to 0
+        fgets(temp_choice, sizeof(temp_choice), stdin);      //Getting the choice of the user
+        strstrip(temp_choice);     //Stripping the choice of leading and trailing whitespaces
+        choice = atoi(temp_choice);     //Converting the choice to an integer
 
         switch (choice) {               //Switch case to perform the action
             case 1: {
@@ -90,6 +129,11 @@ void send_mail(char * server_ip, int smtp_port) {
             get_smtp_response();                              //Get the response
         } else if (smtp_state == 1) {
             send_smtp_command();                              //Send the command
+        } else if (smtp_state == -1) {
+            break;                                                  //Exiting send_mail()
+        } else {
+            printf("Unknown smtp state: %d\n", smtp_state);
+            exit(0);
         }
     }
 }
@@ -147,11 +191,62 @@ void get_smtp_response() {                         //Function to process the res
         }
     }
 
+    //Removing the <CRLF> from the end of the line
+    complete_line[strlen(complete_line) - 2] = '\0';
+    complete_line[strlen(complete_line) - 1] = '\0';
+
     switch (response_code) {    //Switch case to process the response code
         case 220: {     //Service Ready
             printf("Service Ready\n");              //For debugging purposes
             smtp_state = 1;     //Expecting a command from the client
             commd_state = 0;    //Send HELO
+            break;
+        }
+        case 221: {     //Service closing transmission channel
+            printf("Service closing transmission channel\n");              //For debugging purposes
+            close(sockfd);      //Closing the socket
+            smtp_state = -1;     //Exiting send_mail()
+            break;
+        }
+        case 250: {     //Requested mail action okay, completed
+            printf("Requested mail action okay, completed\n");              //For debugging purposes
+            smtp_state = 1;     //Expecting a command from the client
+
+            if (commd_state == 0) {             //On a successful HELO, clear the buffers (rfc 821, pg 19)
+                memset(username_sender, 0, sizeof(username_sender));     //Setting the buffer to 0
+                memset(domain_sender, 0, sizeof(domain_sender));     //Setting the buffer to 0
+                memset(username_recipient, 0, sizeof(username_recipient));     //Setting the buffer to 0
+                memset(domain_recipient, 0, sizeof(domain_recipient));     //Setting the buffer to 0
+                memset(subject, 0, sizeof(subject));     //Setting the buffer to 0
+                int ret = get_user_mail_input();
+                if (ret == 0) {
+                    commd_state = 1;    //Send MAIL FROM
+                } else {
+                    printf("Incorrect format\n");
+                    commd_state = -1;    //Send QUIT (Emergency Exit)
+                }
+            } else if (commd_state == 1) {      //On a successful MAIL FROM
+                commd_state = 2;    //Send RCPT TO
+            } else if (commd_state == 2) {
+                commd_state = 3;    //Send DATA
+            } else if (commd_state == 4) {
+                //Now that OK has been received, the rest of the mail is in the hands of the server.
+                printf("“Mail sent successfully”\n");
+                commd_state = -1;    //Send QUIT
+            }
+            break;
+        }
+        case 354: {     //Start mail input; end with <CRLF>.<CRLF>
+            printf("Start mail input; end with <CRLF>.<CRLF>\n");              //For debugging purposes
+            smtp_state = 1;     //Expecting a command from the client
+            commd_state = 4;    //Send DATA lines
+            break;
+        }
+        case 550: {     //Requested action not taken: mailbox unavailable. We can do 2 things here, either QUIT or continue transmitting the mail. Both are correct decisions afaik. Assignment tells us to print the error, so that is what I'll do.
+            printf("Requested action not taken: mailbox unavailable\n");              //For debugging purposes
+            printf("Error in sending mail: %s\n", complete_line);              //Printing the received error
+            smtp_state = 1;     //Expecting a command from the client
+            commd_state = -1;    //Send QUIT
             break;
         }
         default: {
@@ -161,18 +256,192 @@ void get_smtp_response() {                         //Function to process the res
     }
 }
 
-void send_hello() {     //Function to send HELO
-    /* HELO syntax: rfc 821, pg */
+void send_smtp_command() {      //Function to send the command to the server
+    switch (commd_state) {
+        case 0: {       //Send HELO
+            send_HELO();
+            break;
+        }
+        case 1: {       //Send MAIL
+            send_MAIL();
+            break;
+        }
+        case 2: {       //Send RCPT
+            send_RCPT();
+            break;
+        }
+        case 3: {       //Send DATA
+            send_DATA();
+            break;
+        }
+        case 4: {       //Send DATA lines
+            send_DATA_lines();
+            break;
+        }
+        case -1: {      //Send QUIT
+            send_QUIT();
+            break;
+        }
+        default: {
+            printf("Unknown command state: %d\n", commd_state);
+            exit(0);
+        }
+    }
+}
+
+int get_user_mail_input() {         //Gets input from user for the mail. Returns 0 if the input is valid, 1 otherwise
+    char buffer[512];       //Buffer to store the user input, set to have a higher size than any individual input
+    memset(buffer, 0, sizeof(buffer));     //Setting the buffer to 0
+    printf("Enter the mail in the pre-determined format:\n");
+
+    //Getting "From: <username>@<domain name>"
+    fgets(buffer, sizeof(buffer), stdin);
+    strstrip(buffer);     //Stripping the input of leading and trailing whitespaces
+    if (sscanf(buffer, "From: %255[^@]@%255[^\n]", username_sender, domain_sender) != 2) {          //Assignment: Wherever a space character is shown, one or more spaces can be there
+        printf("Invalid 'From' format\n");          //For debugging purposes
+        return 1;
+    }
+    strstrip(username_sender);     //Stripping the sender's username of leading and trailing whitespaces
+    strstrip(domain_sender);     //Stripping the sender's domain of leading and trailing whitespaces
+    if (strlen(username_sender) == 0 || strlen(domain_sender) == 0) {
+        printf("Invalid 'From' format\n");          //For debugging purposes
+        return 1;
+    }
+
+    //Getting "To: <username>@<domain name>"
+    fgets(buffer, sizeof(buffer), stdin);
+    strstrip(buffer);     //Stripping the input of leading and trailing whitespaces
+    if (sscanf(buffer, "To: %255[^@]@%255[^\n]", username_recipient, domain_recipient) != 2) {
+        printf("Invalid 'To' format\n");          //For debugging purposes
+        return 1;
+    }
+    strstrip(username_recipient);     //Stripping the recipient's username of leading and trailing whitespaces
+    strstrip(domain_recipient);     //Stripping the recipient's domain of leading and trailing whitespaces
+    if (strlen(username_recipient) == 0 || strlen(domain_recipient) == 0) {
+        printf("Invalid 'To' format\n");          //For debugging purposes
+        return 1;
+    }
+
+    //Getting "Subject: <subject string, max 50 characters>"
+    fgets(buffer, sizeof(buffer), stdin);
+    strstrip(buffer);     //Stripping the input of leading and trailing whitespaces
+    if (sscanf(buffer, "Subject: %100[^\n]", subject) != 1) {
+        printf("Invalid 'Subject' format\n");          //For debugging purposes
+        return 1;
+    }
+    //For the moment, I will not strip the subject or the message. The addresses have to be stripped, because spaces aren't allowed in smtp, but idk about subject and message. Will check
+    
+    if (strlen(subject) > 50) {             //Checking length of subject string
+        printf("Invalid 'Subject' format (Too long)\n");          //For debugging purposes
+        return 1;
+    }
+
+    //Getting "<Message body – one or more lines, terminated by a final line with only a fullstop character>"
+    strcpy(message, "");        //Setting the message to an empty string
+    int line_count = 0;
+    while (1) {
+        fgets(buffer, sizeof(buffer), stdin);
+        if (strcmp(buffer, ".\n") == 0) {     //If the line is a fullstop
+            break;      //Break out of the loop
+        }
+
+        if (strlen(buffer) > 80) {             //Checking length of message line
+            printf("Invalid 'Message' format (Line too long)\n");          //For debugging purposes
+            return 1;
+        }
+
+        strcat(message, buffer);        //Append the buffer to the message
+
+        line_count++;
+        if (line_count > 50) {          //Checking the number of lines in the message
+            printf("Invalid 'Message' format (Too many lines)\n");          //For debugging purposes
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+void send_HELO() {     //Function to send HELO
+    /* HELO: rfc 821, pg 18; Syntax, rfc 821, pg 29: HELO <SP> <domain> <CRLF>*/
     char * hello = "HELO sussus-amongus.kgpian.edu.in\r\n";      //Command to send
     send(sockfd, hello, strlen(hello), 0);      //Sending the command
     smtp_state = 0;     //Expecting a response from the server
 }
 
-void send_smtp_command() {      //Function to send the command to the server
-    switch (commd_state) {
-        case 0: {       //Send HELO
-            send_hello();
-            break;
+void send_MAIL() {     //Function to send MAIL
+    /* MAIL: rfc 821, pg 20; Syntax, rfc 821, pg 29: MAIL <SP> FROM:<reverse-path> <CRLF>*/
+    char mail[1024];        //Buffer to store the command.  The maximum total length of a command line including the command word and the <CRLF> is 512 octets. rfc 5321, pg 63
+    memset(mail, 0, sizeof(mail));     //Setting the buffer to 0
+
+    sprintf(mail, "MAIL FROM:<%s@%s>\r\n", username_sender, domain_sender);      //Command to send
+    send(sockfd, mail, strlen(mail), 0);      //Sending the command
+
+    smtp_state = 0;     //Expecting a response from the server
+}
+
+void send_RCPT() {     //Function to send RCPT
+    /* RCPT: rfc 821, pg 20; Syntax, rfc 821, pg 29: RCPT <SP> TO:<forward-path> <CRLF>*/
+    char rcpt[1024];        //Buffer to store the command.  The maximum total length of a command line including the command word and the <CRLF> is 512 octets. rfc 5321, pg 63
+    memset(rcpt, 0, sizeof(rcpt));     //Setting the buffer to 0
+
+    sprintf(rcpt, "RCPT TO:<%s@%s>\r\n", username_recipient, domain_recipient);      //Command to send
+    send(sockfd, rcpt, strlen(rcpt), 0);      //Sending the command
+
+    smtp_state = 0;     //Expecting a response from the server
+}
+
+void send_DATA() {     //Function to send DATA
+    /* DATA: rfc 5321, pg 36; Syntax, rfc 5321, pg 29: DATA <CRLF>
+    An explanation of how the data is actually sent is in send_DATA_lines() */
+    char * data = "DATA\r\n";      //Command to send
+    send(sockfd, data, strlen(data), 0);      //Sending the command
+
+    smtp_state = 0;     //Expecting a response from the server
+}
+
+void send_DATA_lines() {    //Function to send DATA lines
+    /* DATA: rfc 5321, pg 36
+    The receiver normally sends a 354 response to DATA, and then treats the lines (strings ending in <CRLF> sequences)
+    The mail data may contain any of the 128 ASCII character codes, although experience has indicated that use of control characters other than SP, HT, CR, and LF may cause problems and SHOULD be avoided when possible.
+    The mail data are terminated by a line containing only a period, that is, the character sequence "<CRLF>.<CRLF>", where the first <CRLF> is actually the terminator of the previous line */
+
+    char text_line[1024];       //Buffer to store the line of text.  The maximum total length of a text line including <CRLF> (not counting the leading dot duplicated for transparency) is 1000 octets. rfc 5321, pg 63
+    memset(text_line, 0, sizeof(text_line));     //Setting the buffer to 0
+
+    // message variable consists of multiple lines of text, each line ending with a '\n'. Extract each line one at a time, remove the '\n' and append the <CRLF> to the end of the line. This is send to the server.
+    /* Transparency: rfc 5321, pg 62: Without some provision for data transparency, the character sequence "<CRLF>.<CRLF>" ends the mail text and cannot be sent by the user.
+    Before sending a line of mail text, the SMTP client checks the first character of the line.  If it is a period, one additional period is inserted at the beginning of the line. */
+    
+    char * line = strtok(message, "\n");        //Extracting the first line
+
+    //Sending the lines
+    while (line != NULL) {      //While there are still lines left
+        if (line[0] == '.') {       //If the line starts with a '.'
+            memmove(line + 1, line, strlen(line));     //Move the line to the right by 1 character
+            line[0] = '.';      //Insert a '.' at the start of the line
         }
+
+        strcat(line, "\r\n");       //Append the <CRLF> to the end of the line
+        strcpy(text_line, line);        //Copy the line to the text_line buffer
+
+        send(sockfd, text_line, strlen(text_line), 0);      //Sending the line
+        memset(text_line, 0, sizeof(text_line));     //Setting the buffer to 0
+
+        line = strtok(NULL, "\n");        //Extracting the next line
     }
+
+    //Sending the <CRLF>.<CRLF> line. Note: As mentioned above, the first <CRLF> is actually the terminator of the previous line, so we don't need to append it.
+    char * end = ".\r\n";
+    send(sockfd, end, strlen(end), 0);      //Sending the line
+
+    smtp_state = 0;     //Expecting a response from the server
+}
+
+void send_QUIT() {
+    /* QUIT: rfc 5321, pg 40; Syntax, rfc 5321, pg 40: QUIT <CRLF>*/
+    char * quit = "QUIT\r\n";      //Command to send
+    send(sockfd, quit, strlen(quit), 0);      //Sending the command
+
+    smtp_state = 0;     //Expecting a response from the server
 }
