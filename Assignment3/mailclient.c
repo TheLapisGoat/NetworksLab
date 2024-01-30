@@ -204,19 +204,19 @@ void get_smtp_response() {                         //Function to process the res
 
     switch (response_code) {    //Switch case to process the response code
         case 220: {     //Service Ready
-            printf("Service Ready\n");              //For debugging purposes
+            // printf("Service Ready\n");              //For debugging purposes
             smtp_state = 1;     //Expecting a command from the client
             commd_state = 0;    //Send HELO
             break;
         }
         case 221: {     //Service closing transmission channel
-            printf("Service closing transmission channel\n");              //For debugging purposes
+            // printf("Service closing transmission channel\n");              //For debugging purposes
             close(sockfd);      //Closing the socket
             smtp_state = -1;     //Exiting send_mail()
             break;
         }
         case 250: {     //Requested mail action okay, completed
-            printf("Requested mail action okay, completed\n");              //For debugging purposes
+            // printf("Requested mail action okay, completed\n");              //For debugging purposes
             smtp_state = 1;     //Expecting a command from the client
 
             if (commd_state == 0) {             //On a successful HELO, clear the buffers (rfc 821, pg 19)
@@ -244,13 +244,13 @@ void get_smtp_response() {                         //Function to process the res
             break;
         }
         case 354: {     //Start mail input; end with <CRLF>.<CRLF>
-            printf("Start mail input; end with <CRLF>.<CRLF>\n");              //For debugging purposes
+            // printf("Start mail input; end with <CRLF>.<CRLF>\n");              //For debugging purposes
             smtp_state = 1;     //Expecting a command from the client
             commd_state = 4;    //Send DATA lines
             break;
         }
         case 550: {     //Requested action not taken: mailbox unavailable. We can do 2 things here, either QUIT or continue transmitting the mail. Both are correct decisions afaik. Assignment tells us to print the error, so that is what I'll do.
-            printf("Requested action not taken: mailbox unavailable\n");              //For debugging purposes
+            // printf("Requested action not taken: mailbox unavailable\n");              //For debugging purposes
             printf("Error in sending mail: %s\n", complete_line);              //Printing the received error
             smtp_state = 1;     //Expecting a command from the client
             commd_state = -1;    //Send QUIT
@@ -305,13 +305,13 @@ int get_user_mail_input() {         //Gets input from user for the mail. Returns
     fgets(buffer, sizeof(buffer), stdin);
     strstrip(buffer);     //Stripping the input of leading and trailing whitespaces
     if (sscanf(buffer, "From: %255[^@]@%255[^\n]", username_sender, domain_sender) != 2) {          //Assignment: Wherever a space character is shown, one or more spaces can be there
-        printf("Invalid 'From' format\n");          //For debugging purposes
+        // printf("Invalid 'From' format\n");          //For debugging purposes
         return 1;
     }
     strstrip(username_sender);     //Stripping the sender's username of leading and trailing whitespaces
     strstrip(domain_sender);     //Stripping the sender's domain of leading and trailing whitespaces
     if (strlen(username_sender) == 0 || strlen(domain_sender) == 0) {
-        printf("Invalid 'From' format\n");          //For debugging purposes
+        // printf("Invalid 'From' format\n");          //For debugging purposes
         return 1;
     }
 
@@ -319,13 +319,13 @@ int get_user_mail_input() {         //Gets input from user for the mail. Returns
     fgets(buffer, sizeof(buffer), stdin);
     strstrip(buffer);     //Stripping the input of leading and trailing whitespaces
     if (sscanf(buffer, "To: %255[^@]@%255[^\n]", username_recipient, domain_recipient) != 2) {
-        printf("Invalid 'To' format\n");          //For debugging purposes
+        // printf("Invalid 'To' format\n");          //For debugging purposes
         return 1;
     }
     strstrip(username_recipient);     //Stripping the recipient's username of leading and trailing whitespaces
     strstrip(domain_recipient);     //Stripping the recipient's domain of leading and trailing whitespaces
     if (strlen(username_recipient) == 0 || strlen(domain_recipient) == 0) {
-        printf("Invalid 'To' format\n");          //For debugging purposes
+        // printf("Invalid 'To' format\n");          //For debugging purposes
         return 1;
     }
 
@@ -333,13 +333,13 @@ int get_user_mail_input() {         //Gets input from user for the mail. Returns
     fgets(buffer, sizeof(buffer), stdin);
     strstrip(buffer);     //Stripping the input of leading and trailing whitespaces
     if (sscanf(buffer, "Subject: %100[^\n]", subject) != 1) {
-        printf("Invalid 'Subject' format\n");          //For debugging purposes
+        // printf("Invalid 'Subject' format\n");          //For debugging purposes
         return 1;
     }
     //For the moment, I will not strip the subject or the message. The addresses have to be stripped, because spaces aren't allowed in smtp, but idk about subject and message. Will check
     
     if (strlen(subject) > 50) {             //Checking length of subject string
-        printf("Invalid 'Subject' format (Too long)\n");          //For debugging purposes
+        // printf("Invalid 'Subject' format (Too long)\n");          //For debugging purposes
         return 1;
     }
 
@@ -353,7 +353,7 @@ int get_user_mail_input() {         //Gets input from user for the mail. Returns
         }
 
         if (strlen(buffer) > 80) {             //Checking length of message line
-            printf("Invalid 'Message' format (Line too long)\n");          //For debugging purposes
+            // printf("Invalid 'Message' format (Line too long)\n");          //For debugging purposes
             return 1;
         }
 
@@ -361,7 +361,7 @@ int get_user_mail_input() {         //Gets input from user for the mail. Returns
 
         line_count++;
         if (line_count > 50) {          //Checking the number of lines in the message
-            printf("Invalid 'Message' format (Too many lines)\n");          //For debugging purposes
+            // printf("Invalid 'Message' format (Too many lines)\n");          //For debugging purposes
             return 1;
         }
     }
@@ -426,7 +426,7 @@ void send_DATA_lines() {    //Function to send DATA lines
     strcat(text_line, domain_sender);
     strcat(text_line, "\r\n");
     send(sockfd, text_line, strlen(text_line), 0);      //Sending the line
-    printf("%s", text_line);              //For debugging purposes
+    // printf("%s", text_line);              //For debugging purposes
 
     //Sending To: <username>@<domain name>
     strcpy(text_line, "To: ");
@@ -442,19 +442,19 @@ void send_DATA_lines() {    //Function to send DATA lines
     strcat(text_line, "\r\n");
     send(sockfd, text_line, strlen(text_line), 0);      //Sending the line
 
-
     //Sending the message
+    memset(text_line, 0, sizeof(text_line));
     char * line = strtok(message, "\n");        //Extracting the first line
 
     //Sending the lines
     while (line != NULL) {      //While there are still lines left
-        if (line[0] == '.') {       //If the line starts with a '.'
-            memmove(line + 1, line, strlen(line));     //Move the line to the right by 1 character
-            line[0] = '.';      //Insert a '.' at the start of the line
+        strcpy(text_line, line);
+        if (text_line[0] == '.') {       //If the line starts with a '.'
+            memmove(text_line + 1, text_line, strlen(text_line));     //Move the line to the right by 1 character
+            text_line[0] = '.';      //Insert a '.' at the start of the line
         }
 
-        strcat(line, "\r\n");       //Append the <CRLF> to the end of the line
-        strcpy(text_line, line);        //Copy the line to the text_line buffer
+        strcat(text_line, "\r\n");       //Append the <CRLF> to the end of the line
 
         send(sockfd, text_line, strlen(text_line), 0);      //Sending the line
         memset(text_line, 0, sizeof(text_line));     //Setting the buffer to 0

@@ -167,7 +167,7 @@ void get_command() {
 
     if (strcmp(command, "HELO") == 0) {
         if (commd_state == 0) {
-            printf("HELO command received\n");      //For debugging
+            // printf("HELO command received\n");      //For debugging
             state = 1;
         } else {
             printf("HELO command received in an unexpected state\n");
@@ -175,7 +175,7 @@ void get_command() {
         }
     } else if (strcmp(command, "MAIL") == 0) {          // MAIL: rfc 821, pg 20; Syntax, rfc 821, pg 29: MAIL <SP> FROM:<reverse-path> <CRLF>
         if (commd_state == 1) {
-            printf("MAIL command received\n");      //For debugging
+            // printf("MAIL command received\n");      //For debugging
 
             //From is of form: MAIL FROM:<username_sender@domain_sender>\r\n
             //Extracting the username_sender and domain_sender
@@ -193,7 +193,7 @@ void get_command() {
         }
     } else if (strcmp(command, "RCPT") == 0) {
         if (commd_state == 2) {
-            printf("RCPT command received\n");      //For debugging
+            // printf("RCPT command received\n");      //For debugging
 
             //To is of form: RCPT TO:<username_recipient@domain_recipient>\r\n
             //Extracting the username_recipient and domain_recipient
@@ -220,7 +220,7 @@ void get_command() {
         }
     } else if (strcmp(command, "DATA") == 0) {
         if (commd_state == 3) {
-            printf("DATA command received\n");      //For debugging
+            // printf("DATA command received\n");      //For debugging
 
             //Sending a 354 response
             char message[512] = "354 Enter Mail; end with <CRLF>.<CRLF>\r\n";
@@ -234,7 +234,7 @@ void get_command() {
             exit(0);
         }
     } else if (strcmp(command, "QUIT") == 0) {
-        printf("QUIT command received\n");      //For debugging
+        // printf("QUIT command received\n");      //For debugging
 
         //Sending a 221 response
         char message[512] = "221 <iitkgp.edu> Service closing transmission channel\r\n";
@@ -298,6 +298,7 @@ void get_mail_message() {
 
             //Append the line to the message
             strcat(message, text_line);
+            
             //Resetting the text line
             memset(text_line, 0, sizeof(text_line));
 
