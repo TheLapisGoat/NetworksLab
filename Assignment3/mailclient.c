@@ -25,6 +25,13 @@ char message[5000];          //Upper limit of message is 4000 bytes, assignment:
 void send_mail(char * server_ip, int smtp_port);                //Function to send mail
 void get_smtp_response();                                       //Function to process the response from the server.
 void send_smtp_command();                                       //Function to send the command to the server
+int get_user_mail_input();                                      //Gets input from user for the mail. Returns 0 if the input is valid, 1 otherwise
+void send_HELO();                                               //Function to send HELO
+void send_MAIL();                                               //Function to send MAIL
+void send_RCPT();                                               //Function to send RCPT
+void send_DATA();                                               //Function to send DATA
+void send_DATA_lines();                                         //Function to send DATA lines
+void send_QUIT();                                               //Function to send QUIT
 
 char *strstrip(char *s) {         //Helper function to strip the string of leading and trailing whitespaces
         size_t size;
@@ -143,11 +150,11 @@ void get_smtp_response() {                         //Function to process the res
     SMTP client MUST NOT send CR or LF unless sending <CRLF> as line terminator. RFC 5321, pg 13 */
     /* All SMTP responses are of 2 forms (RFC 5321, pg 49):
     1. Single Line: <3-digit-code> <SP> <message> <CRLF>
-    2. Multi Line: <3-digit-code> <Hyphen> <line>                //I'm assuming by line, they mean the above definition of a line  //Update: RFC 5321 pg 32 has an example of the multiline response, which follows what I've written here.
+    2. Multi Line: <3-digit-code> <Hyphen> <line>                //I'm assuming by line, they mean the above definition of a line  //Update: RFC 5321 pg 63 has an example of the multiline response, which follows what I've written here.
     Ended by the line: <3-digit-code> <SP> <message> <CRLF>     //servers SHOULD send the <SP> if subsequent text is not sent, but clients MUST be prepared for it to be omitted.
     */
     /*
-    The maximum total length of a reply line including the reply code and the <CRLF> is 512 octets. RFC 5321, pg 62
+    The maximum total length of a reply line including the reply code and the <CRLF> is 512 octets. RFC 5321, pg 63
     */
 
     //Each of the reply lines may not come in a single packet, so we need to keep reading until we get a <CRLF> at the end of the line.
@@ -161,7 +168,7 @@ void get_smtp_response() {                         //Function to process the res
     memset(complete_line, 0, sizeof(complete_line));     //Setting the buffer to 0
 
     while (1) {
-        int bytes_read = read(sockfd, buffer, sizeof(buffer));     //Reading the data from the socket
+        int bytes_read = recv(sockfd, buffer, sizeof(buffer), 0);      //Reading from the socket
 
         char * line_end = strstr(buffer, "\r\n");     //Finding the <CRLF>
 
@@ -231,7 +238,7 @@ void get_smtp_response() {                         //Function to process the res
                 commd_state = 3;    //Send DATA
             } else if (commd_state == 4) {
                 //Now that OK has been received, the rest of the mail is in the hands of the server. rfc 5321, pg 37
-                printf("“Mail sent successfully”\n");
+                printf("Mail sent successfully\n");
                 commd_state = -1;    //Send QUIT
             }
             break;
@@ -405,7 +412,6 @@ void send_DATA_lines() {    //Function to send DATA lines
     The receiver normally sends a 354 response to DATA, and then treats the lines (strings ending in <CRLF> sequences)
     The mail data may contain any of the 128 ASCII character codes, although experience has indicated that use of control characters other than SP, HT, CR, and LF may cause problems and SHOULD be avoided when possible.
     The mail data are terminated by a line containing only a period, that is, the character sequence "<CRLF>.<CRLF>", where the first <CRLF> is actually the terminator of the previous line */
-
     char text_line[1024];       //Buffer to store the line of text.  The maximum total length of a text line including <CRLF> (not counting the leading dot duplicated for transparency) is 1000 octets. rfc 5321, pg 63
     memset(text_line, 0, sizeof(text_line));     //Setting the buffer to 0
 
@@ -413,6 +419,31 @@ void send_DATA_lines() {    //Function to send DATA lines
     /* Transparency: rfc 5321, pg 62: Without some provision for data transparency, the character sequence "<CRLF>.<CRLF>" ends the mail text and cannot be sent by the user.
     Before sending a line of mail text, the SMTP client checks the first character of the line.  If it is a period, one additional period is inserted at the beginning of the line. */
     
+    //Sending From: <username>@<domain name>
+    strcpy(text_line, "From: ");
+    strcat(text_line, username_sender);
+    strcat(text_line, "@");
+    strcat(text_line, domain_sender);
+    strcat(text_line, "\r\n");
+    send(sockfd, text_line, strlen(text_line), 0);      //Sending the line
+    printf("%s", text_line);              //For debugging purposes
+
+    //Sending To: <username>@<domain name>
+    strcpy(text_line, "To: ");
+    strcat(text_line, username_recipient);
+    strcat(text_line, "@");
+    strcat(text_line, domain_recipient);
+    strcat(text_line, "\r\n");
+    send(sockfd, text_line, strlen(text_line), 0);      //Sending the line
+
+    //Sending Subject: <subject string>
+    strcpy(text_line, "Subject: ");
+    strcat(text_line, subject);
+    strcat(text_line, "\r\n");
+    send(sockfd, text_line, strlen(text_line), 0);      //Sending the line
+
+
+    //Sending the message
     char * line = strtok(message, "\n");        //Extracting the first line
 
     //Sending the lines
