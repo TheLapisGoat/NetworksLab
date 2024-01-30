@@ -371,7 +371,7 @@ int get_user_mail_input() {         //Gets input from user for the mail. Returns
 
 void send_HELO() {     //Function to send HELO
     /* HELO: rfc 821, pg 18; Syntax, rfc 821, pg 29: HELO <SP> <domain> <CRLF>*/
-    char * hello = "HELO sussus-amongus.kgpian.edu.in\r\n";      //Command to send
+    char * hello = "HELO iitkgp.edu\r\n";      //Command to send
     send(sockfd, hello, strlen(hello), 0);      //Sending the command
     smtp_state = 0;     //Expecting a response from the server
 }

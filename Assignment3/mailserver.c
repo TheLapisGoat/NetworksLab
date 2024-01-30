@@ -13,6 +13,11 @@ int clilen;
 int SERVERPORT;
 struct sockaddr_in cli_addr, serv_addr;
 
+char usernames[100][100];       //Temporarily limiting the number of users to 100
+char passwords[100][100];  
+int numUsers;
+int recipient_exists;
+
 int state;  //0: Waiting for a command, 1: Expected to give a reply
 int commd_state;    //0: Waiting for a HELO command, 1: Waiting for a MAIL command, 2: Waiting for a RCPT command, 3: Waiting for a DATA command
 
@@ -29,6 +34,7 @@ void send_reply();              //Function that sends a reply to the client
 void write_to_socket(char * message);   //Function that writes a message to the socket
 void get_mail_message();             //Function that reads the mail essage from the socket
 void send_mail();               //Function that sends the mail to the recipient
+void append_mail();             //Function that appends the mail to the mymailbox file in the user's directory
 
 
 int main(int argc, char * argv[]) {
@@ -48,9 +54,7 @@ int main(int argc, char * argv[]) {
         exit(0);
     }
 
-    char usernames[100][100];       //Temporarily limiting the number of users to 100
-    char passwords[100][100];  
-    int numUsers = 0;
+    numUsers = 0;
     while (fscanf(fp, "%s %s", usernames[numUsers], passwords[numUsers]) != EOF) {
         numUsers++;
     }
@@ -200,6 +204,15 @@ void get_command() {
             memcpy(username_recipient, username_start + 1, username_end - username_start - 1);
             memcpy(domain_recipient, domain_start + 1, domain_end - domain_start - 1);
 
+            //Checking if the recipient exists
+            recipient_exists = 1;
+            for (int i = 0; i < numUsers; i++) {
+                if (strcmp(username_recipient, usernames[i]) == 0) {
+                    recipient_exists = 1;
+                    break;
+                }
+            }
+
             state = 1;
         } else {
             printf("RCPT command received in an unexpected state\n");
@@ -323,6 +336,17 @@ void send_reply() {
         }
         case 2: {   //Has received a RCPT command
             //Returning a 250 OK with message username_recipient@domain_recipient
+
+            //If recipient does not exist
+            if (recipient_exists == 0) {    //If the recipient does not exist
+                char message[512] = "550 No such user\r\n";
+                write_to_socket(message);
+
+                state = 0;
+                commd_state = 2;
+                break;
+            }
+
             char message[512];
             memset(message, 0, sizeof(message));
             strcat(message, "250 OK Recipient <");
@@ -341,9 +365,36 @@ void send_reply() {
             char message[512] = "250 OK Message accepted for delivery\r\n";
             write_to_socket(message);
 
+            //Append the mail to the mymailbox file in the user's directory
+            append_mail();
+
             state = 0;
             commd_state = 0;
             break;
         }
     }
+}
+
+void append_mail() {
+    //Opening the mymailbox file in the user's directory
+    char filename[100];
+    memset(filename, 0, sizeof(filename));
+    strcat(filename, username_recipient);
+    strcat(filename, "/mymailbox");
+
+    FILE * fp = fopen(filename, "a");
+    if (fp == NULL) {
+        printf("Unable to open mymailbox file\n");
+        exit(0);
+    }
+
+    //Appending the mail to the file char by char
+    for (int i = 0; i < strlen(message); i++) {
+        fputc(message[i], fp);
+    }
+    //Separation .
+    fputc('.', fp);
+    fputc('\n', fp);
+
+    fclose(fp);
 }
