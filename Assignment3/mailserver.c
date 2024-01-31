@@ -7,6 +7,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <time.h>
 
 int sockfd, newsockfd;
 int clilen;
@@ -389,9 +390,26 @@ void append_mail() {
         exit(0);
     }
 
+    //Count the number of lines in the file
+    int num_lines = 0;
+
     //Appending the mail to the file char by char
     for (int i = 0; i < strlen(message); i++) {
         fputc(message[i], fp);
+        if (message[i] == '\n') {
+            num_lines++;
+        }
+
+        //If the number of lines is 3, add the line "Received: <time at which received, in date : hour : minute>"
+        if (num_lines == 3) {
+            //Getting the current time
+            time_t t = time(NULL);
+            struct tm tm = *localtime(&t);
+
+            //Appending the line to the file
+            fprintf(fp, "Received: %d-%02d-%02d:%02d:%02d\n", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min);
+            num_lines++;
+        }
     }
     //Separation .
     fputc('.', fp);
