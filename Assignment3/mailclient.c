@@ -124,7 +124,7 @@ void send_mail(char * server_ip, int smtp_port) {
     memset(&serv_addr, 0, sizeof(serv_addr));                       //Setting the server address
     serv_addr.sin_family = AF_INET;                                 //Setting the family to IPv4
     serv_addr.sin_port = htons(smtp_port);                          //Setting the port number
-    inet_aton(server_ip, &serv_addr.sin_addr);                      //Setting the IP address
+    serv_addr.sin_addr.s_addr = inet_addr(server_ip);               //Setting the IP Address
 
     if ((connect(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr))) < 0) {     //Connecting to the server
         perror("Unable to connect to server\n");
@@ -266,26 +266,38 @@ void get_smtp_response() {                         //Function to process the res
 void send_smtp_command() {      //Function to send the command to the server
     switch (commd_state) {
         case 0: {       //Send HELO
+            // printf("Sending HELO\n");
+            // fflush(stdout);
             send_HELO();
             break;
         }
         case 1: {       //Send MAIL
+            // printf("Sending MAIL\n");
+            // fflush(stdout);
             send_MAIL();
             break;
         }
         case 2: {       //Send RCPT
+            // printf("Sending RCPT\n");
+            // fflush(stdout);
             send_RCPT();
             break;
         }
         case 3: {       //Send DATA
+            // printf("Sending DATA\n");
+            // fflush(stdout);
             send_DATA();
             break;
         }
         case 4: {       //Send DATA lines
+            // printf("Sending DATA lines\n");
+            // fflush(stdout);
             send_DATA_lines();
             break;
         }
         case -1: {      //Send QUIT
+            // printf("Sending QUIT\n");
+            // fflush(stdout);
             send_QUIT();
             break;
         }
