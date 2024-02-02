@@ -72,8 +72,8 @@ int main(int argc, char * argv[]) {
 
     //Setting up the server address
     serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = INADDR_ANY;
     serv_addr.sin_port = htons(SERVERPORT);
+    serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
     //Binding the socket to the server address
     if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
@@ -166,6 +166,13 @@ void get_command() {
     //Shifting the command_line buffer to the left by 4 bytes
     memmove(command_line, command_line + 4, strlen(command_line) - 4);
 
+    //Set command to upper case
+    for (int i = 0; i < 4; i++) {
+        if (command[i] >= 'a' && command[i] <= 'z') {
+            command[i] = command[i] - 32;
+        }
+    }
+
     if (strcmp(command, "HELO") == 0) {
         if (commd_state == 0) {
             // printf("HELO command received\n");      //For debugging
@@ -206,7 +213,7 @@ void get_command() {
             memcpy(domain_recipient, domain_start + 1, domain_end - domain_start - 1);
 
             //Checking if the recipient exists
-            recipient_exists = 1;
+            recipient_exists = 0;
             for (int i = 0; i < numUsers; i++) {
                 if (strcmp(username_recipient, usernames[i]) == 0) {
                     recipient_exists = 1;

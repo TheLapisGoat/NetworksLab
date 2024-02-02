@@ -124,7 +124,7 @@ void send_mail(char * server_ip, int smtp_port) {
     memset(&serv_addr, 0, sizeof(serv_addr));                       //Setting the server address
     serv_addr.sin_family = AF_INET;                                 //Setting the family to IPv4
     serv_addr.sin_port = htons(smtp_port);                          //Setting the port number
-    serv_addr.sin_addr.s_addr = inet_addr(server_ip);               //Setting the IP Address
+    serv_addr.sin_addr.s_addr = inet_addr(server_ip);   
 
     if ((connect(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr))) < 0) {     //Connecting to the server
         perror("Unable to connect to server\n");
@@ -198,9 +198,9 @@ void get_smtp_response() {                         //Function to process the res
         }
     }
 
-    //Removing the <CRLF> from the end of the line
-    complete_line[strlen(complete_line) - 2] = '\0';
-    complete_line[strlen(complete_line) - 1] = '\0';
+    // //Removing the <CRLF> from the end of the line
+    // complete_line[strlen(complete_line) - 1] = '\0';
+    // complete_line[strlen(complete_line) - 1] = '\0';
 
     switch (response_code) {    //Switch case to process the response code
         case 220: {     //Service Ready
