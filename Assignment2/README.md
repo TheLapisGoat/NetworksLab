@@ -1,3 +1,3 @@
 v1 contains the first version of the assignment, where the encryption key is sent as a character string to the server.
 
-v2 contains an updated version of the assignment, where the encryption key is sent as an integer to the server. In this version, the key is first converted from host to network encoding, then sent to the server. The server then converts the key from network to host encoding. This is the intended way to send integers over a network.
+v2 contains an updated version of the assignment, where the encryption key is sent as a 4-byte unsigned integer to the server. In this version, the key is first converted from host to network encoding, then sent to the server. The server then converts the key from the network to host encoding. This is the intended way of sending integers over a network.
