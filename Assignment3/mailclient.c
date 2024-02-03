@@ -99,8 +99,6 @@ int main(int argc, char * argv[]) {
                 break;
             }
             case 2: {       //Send Mail
-                smtp_state = 0;
-                commd_state = 0;
                 send_mail(server_ip, smtp_port);
                 break;
             }
@@ -118,7 +116,7 @@ void send_mail(char * server_ip, int smtp_port) {
 
     if ((sockfd = socket(PF_INET, SOCK_STREAM, 0)) < 0) {           //Creating a socket
         perror("Unable to create socket\n");
-        exit(0);
+        return;
     }
 
     memset(&serv_addr, 0, sizeof(serv_addr));                       //Setting the server address
@@ -128,8 +126,11 @@ void send_mail(char * server_ip, int smtp_port) {
 
     if ((connect(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr))) < 0) {     //Connecting to the server
         perror("Unable to connect to server\n");
-        exit(0);
+        return;
     }
+
+    smtp_state = 0;
+    commd_state = 0;
 
     while (1) {
         if (smtp_state == 0) {                                      //Expecting a response from the server
@@ -140,7 +141,7 @@ void send_mail(char * server_ip, int smtp_port) {
             break;                                                  //Exiting send_mail()
         } else {
             printf("Unknown smtp state: %d\n", smtp_state);
-            exit(0);
+            return;
         }
     }
 }
@@ -258,7 +259,8 @@ void get_smtp_response() {                         //Function to process the res
         }
         default: {
             printf("Unknown response code: %d\n", response_code);
-            exit(0);
+            smtp_state = 1;
+            commd_state = -1;    //Send QUIT
         }
     }
 }
@@ -303,7 +305,8 @@ void send_smtp_command() {      //Function to send the command to the server
         }
         default: {
             printf("Unknown command state: %d\n", commd_state);
-            exit(0);
+            smtp_state = 1;
+            commd_state = -1;    //Send QUIT
         }
     }
 }
