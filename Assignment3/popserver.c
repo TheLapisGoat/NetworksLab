@@ -20,7 +20,7 @@ int numUsers;
 int recipient_exists;
 
 void send_greeting();
-void authorization();
+char* authorization();
 
 int main(int argc, char * argv[]) {
     int n;      //Number of bytes read
@@ -80,10 +80,13 @@ int main(int argc, char * argv[]) {
         if (fork() == 0) {      //Child Process
             //Closing the socket that is listening for connections in the child process
             close(sockfd);
-
             send_greeting();        //Function that sends the greeting message to the client
-            authorization();      //Function that handles the pop3 authorization with the client
-
+            char* mailbox_fname = authorization();      //Function that handles the pop3 authorization with the client
+            FILE* mailbox = fopen(mailbox_fname, "r");
+            if (mailbox_fname != NULL) {
+                transaction(mailbox, mailbox_fname);      //Function that handles the pop3 transaction with the client
+                update_pop3();      //Function that updates the pop3 server
+            }
             //Closing the socket that is connected to the client in the child process
             close(newsockfd);
             exit(0);
@@ -102,7 +105,7 @@ void send_greeting() {  //Function that sends the greeting message to the client
     send(newsockfd, greeting, strlen(greeting), 0);
 }
 
-void authorization() {  //Function that handles the pop3 authorization with the client
+char* authorization() {  //Function that handles the pop3 authorization with the client
     char buffer[1000];
     char complete_line[1000];
     char username[100];
@@ -183,6 +186,184 @@ void authorization() {  //Function that handles the pop3 authorization with the 
                 break;
             }
         }
+
+        //Resetting the complete_line buffer
+        memset(complete_line, 0, sizeof(complete_line));
+    }
+}
+
+// TODO: Complete transaction
+
+void transaction(FILE* mailbox, char* mailbox_fname) {  //Function that handles the pop3 transaction with the client
+    char buffer[1000];
+    char complete_line[1000];
+    memset(buffer, 0, sizeof(buffer));
+    memset(complete_line, 0, sizeof(complete_line));
+
+    int* to_delete = (int*)malloc(1 * sizeof(int));
+    int to_delete_count = 0;
+
+    while (1) {
+        memset(buffer, 0, sizeof(buffer));
+        read(newsockfd, buffer, sizeof(buffer));
+
+        //Check for full line
+        strcat(complete_line, buffer);
+        char * line_end = strstr(complete_line, "\r\n");
+        if (line_end == NULL) {
+            continue;
+        } else {
+            //Removing the \r\n from the end of the line
+            *line_end = '\0';
+        }
+        // Handle QUIT first
+        if (strncmp(complete_line, "QUIT", 4) == 0) {
+            // update the mailbox
+            FILE* temp = fopen("temp.txt", "w");
+            char line[1000];
+            int count = 0;
+            // TODO: wtf is this trash try to find a better way to do this
+            while (fgets(line, sizeof(line), mailbox) != NULL) {
+                if(strncmp(line, ".\r\n", 3) == 0) count++;
+                // find if count is in to_delete
+                for (int i = 0; i < to_delete_count; i++) {
+                    if (to_delete[i] == count) {
+                        while (fgets(line, sizeof(line), mailbox) != NULL) {
+                            if (strncmp(line, ".\r\n", 3) == 0){
+                                count++;
+                                break;
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+            fclose(mailbox);
+            mailbox = fopen(mailbox_fname, "w");
+            fclose(temp);
+            temp = fopen("temp.txt", "r");
+            while (fgets(line, sizeof(line), temp) != NULL) {
+                fprintf(mailbox, "%s", line);
+            }
+            fclose(temp);
+            fclose(mailbox);
+            free(to_delete);
+            send(newsockfd, "+OK POP3 server signing off\r\n", sizeof("+OK POP3 server signing off\r\n"), 0);
+
+        } 
+
+        else if (strncmp(complete_line, "STAT", 4) == 0) {
+            // return +OK followed by number of messages and total size
+            int numMessages = 0;
+            int totalSize = 0;
+            char line[1000];
+            // individual messages are separated by a .\r\n TODO: check if this is the case
+            while (fgets(line, sizeof(line), mailbox) != NULL) {
+                if (strncmp(line, ".\r\n", 3) == 0) numMessages++;
+                totalSize += strlen(line);
+            }
+            printf("+OK %d %o\r\n", numMessages, totalSize);
+        }
+        
+        else if (strncmp(complete_line, "LIST", 4) == 0) {
+            int msg_num;
+            if (strlen(complete_line) > 5) {
+                sscanf(complete_line, "LIST %d", &msg_num);
+                // return +OK followed by message number and size
+                char line[1000];
+                int size = 0;
+                int count = 0;
+                while (fgets(line, sizeof(line), mailbox) != NULL && count < msg_num) {
+                    if (strncmp(line, ".\r\n", 3) == 0) count++;
+                    if (count == msg_num - 1) size += strlen(line);
+                }
+                if (count == msg_num) printf("+OK %d %d\r\n", msg_num, size);
+                else printf("-ERR no such message, only %d messages in maildrop\r\n", count);
+            } else {
+                // return +OK followed by message number and size for each message
+                char line[1000];
+                int size = 0, total_size = 0;
+                int count = 0;
+                char to_print[1000];
+                while (fgets(line, sizeof(line), mailbox) != NULL) {
+                    if (strncmp(line, ".\r\n", 3) == 0) {
+                        sprintf(to_print, "+OK %d %d\r\n", count, size);
+                        count++;
+                        size = 0;
+                    } else size += strlen(line);
+                    total_size += strlen(line);
+                }
+                printf("+OK %d messages (%d octets)\r\n", count, total_size);
+                printf(to_print); // TODO: check if this is the correct way to print
+            }
+        }
+        else if (strncmp(complete_line, "RETR", 4) == 0) {
+            int msg_num;
+            if (strlen(complete_line) > 5) {
+                sscanf(complete_line, "RETR %d", &msg_num);
+                // return +OK followed by message number and size
+                char line[1000];
+                int size = 0;
+                int count = 0;
+                while (fgets(line, sizeof(line), mailbox) != NULL && count < msg_num) {
+                    if (strncmp(line, ".\r\n", 3) == 0) count++;
+                    if (count == msg_num - 1) size += strlen(line);
+                }
+                if (count == msg_num) {
+                    printf("+OK %d %d\r\n", msg_num, size);
+                    // return the message
+                    while (fgets(line, sizeof(line), mailbox) != NULL && count < msg_num) {
+                        if (strncmp(line, ".\r\n", 3) == 0) count++;
+                        if (count == msg_num - 1) printf("%s", line); // TODO: check how to do bit stuffing for multiline messages
+                    }
+                }   
+                else printf("-ERR no such message, only %d messages in maildrop\r\n", count);
+            }
+            else printf("-ERR no message number specified\r\n");
+        }
+    
+        else if (strncmp(complete_line, "DELE", 4) == 0) {
+            // need msg_num
+            int msg_num;
+            
+            if (strlen(complete_line) > 5) {
+                sscanf(complete_line, "DELE %d", &msg_num);
+                // mark the message for deletion
+                char line[1000];
+                int count = 0;
+                // first check if the message has been marked for deletion
+                int i = 0;
+                for (; i < to_delete_count; i++) {
+                    if (to_delete[i] == msg_num) {
+                        printf("-ERR message %d already deleted\r\n", msg_num);
+                        break;
+                    }
+                }
+                if (i == to_delete_count) continue;
+
+                while (fgets(line, sizeof(line), mailbox) != NULL && count < msg_num) {
+                    if (strncmp(line, ".\r\n", 3) == 0) count++;
+                    if (count == msg_num - 1) {
+                        to_delete = (int*)realloc(to_delete, (to_delete_count + 1) * sizeof(int));
+                        to_delete[to_delete_count] = msg_num;
+                        to_delete_count++;
+                        break;
+                    }
+                }
+                if (count != msg_num) printf("-ERR no such message, only %d messages in maildrop\r\n", count);
+            }
+            else printf("-ERR no message number specified\r\n");
+        }
+        else if (strncmp(complete_line, "NOOP", 4) == 0) {
+            printf("+OK\r\n");
+        }
+        else if (strncmp(complete_line, "RSET", 4) == 0) {
+            // unmark all messages for deletion
+            to_delete = (int*)realloc(to_delete, 1 * sizeof(int));
+            to_delete_count = 0;
+            printf("+OK\r\n");
+        }
+        else send(newsockfd, "-ERR Invalid command\r\n", sizeof("-ERR Invalid command\r\n"), 0);
 
         //Resetting the complete_line buffer
         memset(complete_line, 0, sizeof(complete_line));
