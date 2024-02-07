@@ -49,6 +49,13 @@ void send_RCPT();                                               //Function to se
 void send_DATA();                                               //Function to send DATA
 void send_DATA_lines();                                         //Function to send DATA lines
 void send_QUIT();                                               //Function to send QUIT
+void manage_mail(char * server_ip, int pop3_port);              //Function to manage mail
+int get_pop3_greeted();                                         //Function to get the server greeting
+int get_authenticated();                                        //Function to authenticate the user
+int display_pop3_menu();                                        //Function to display the menu
+int get_pop3_response();                                        //Function to process the response from the server.
+void send_pop3_command();                                       //Function to send the command to the server
+void pop3_quit();                                               //Function to send QUIT
 
 char *strstrip(char *s) {         //Helper function to strip the string of leading and trailing whitespaces
         size_t size;
@@ -726,11 +733,14 @@ int get_pop3_response() {
 
         char * line_end = strstr(buffer, "\r\n");     //Finding the <CRLF>
 
+        printf("Line: %s\n", buffer); fflush(stdout);              //debug
+
         if (line_end == NULL) {     //If the <CRLF> is not found
             strcat(complete_line, buffer);      //Append the buffer to the complete line
             memset(buffer, 0, sizeof(buffer));     //Setting the buffer to 0
             continue;       //Continue reading
         } else {
+            printf("Line: %s\n", buffer); fflush(stdout);              //debug
             strncat(complete_line, buffer, line_end - buffer);      //Append the buffer to the complete line (excluding the <CRLF>)
             memmove(buffer, line_end + 2, sizeof(buffer) - (line_end - buffer) - 2);    //Move the remaining data to the start of the buffer (without the leading <CRLF> from the previous line)
             
@@ -740,8 +750,7 @@ int get_pop3_response() {
                 response_code = 0;      //Negative response
             }
 
-            memset(complete_line, 0, sizeof(complete_line));     //Setting the buffer to 0
-            break;      //Break out of the loop
+            break;
         }
     }
 
@@ -757,6 +766,8 @@ int get_pop3_response() {
             break;
         }
         case 1: {       //Expecting a response to USER
+            printf("Hi");
+            fflush(stdout);
             if (response_code == 1) {     //If the response is a positive response
                 printf("User Accepted: %s\n", complete_line); fflush(stdout);              //debug
                 return 1;
@@ -911,6 +922,8 @@ void send_pop3_command() {
     Each argument may be up to 40 characters long.*/
     switch (commd_state) {
         case 1: {       //Send USER, rfc 1939, pg 13
+            printf("Sending USER\n"); fflush(stdout);             //debug
+
             char pop3_msg[300];        //Buffer to store the command
             memset(pop3_msg, 0, sizeof(pop3_msg));     //Setting the buffer to 0
 
