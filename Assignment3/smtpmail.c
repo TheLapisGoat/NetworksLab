@@ -10,7 +10,7 @@
 #include <time.h>
 
 int sockfd, newsockfd;
-int clilen;
+socklen_t clilen;
 int SERVERPORT;
 struct sockaddr_in cli_addr, serv_addr;
 
@@ -39,11 +39,11 @@ void append_mail();             //Function that appends the mail to the mymailbo
 
 
 int main(int argc, char * argv[]) {
-    int n;      //Number of bytes read
 
     //Checking for the correct number of arguments
     if (argc != 2) {
         printf("Incorrect number of arguments\n");
+        printf("Usage: ./smtpmail <port>\n");
         exit(0);
     }
     SERVERPORT = atoi(argv[1]);

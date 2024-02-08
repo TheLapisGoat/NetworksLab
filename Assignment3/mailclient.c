@@ -81,9 +81,11 @@ int main(int argc, char * argv[]) {
     //Doing an argument check
     if (argc < 4) {
         printf("Insufficient Arguments Provided\n");
+        printf("Usage: ./client <server-ip> <smtp-port> <pop3-port>\n");
         exit(0);
     } else if (argc > 4) {
         printf("Too Many Arguments Provided\n");
+        printf("Usage: ./client <server-ip> <smtp-port> <pop3-port>\n");
         exit(0);
     }
 
@@ -191,7 +193,7 @@ void get_smtp_response() {                         //Function to process the res
     memset(complete_line, 0, sizeof(complete_line));     //Setting the buffer to 0
 
     while (1) {
-        int bytes_read = recv(sockfd, buffer, sizeof(buffer), 0);      //Reading from the socket
+        recv(sockfd, buffer, sizeof(buffer), 0);      //Reading from the socket
 
         char * line_end = strstr(buffer, "\r\n");     //Finding the <CRLF>
 
@@ -572,7 +574,7 @@ void manage_mail(char * server_ip, int pop3_port) {
 
         int choice = -1;
         while (1) {
-            printf("Enter mail no. to see: ");  //Display the prompt
+            printf("Enter mail no. to see (-1 to go back): ");  //Display the prompt
 
             char temp_choice[10];           //Buffer to store the choice of the user
             memset(temp_choice, 0, sizeof(temp_choice));     //Setting the buffer to 0
@@ -730,7 +732,7 @@ int display_pop3_menu() { //Menu of form: Sl. No. <Sender’s email id> <When re
         }
 
         //Display the mail
-        char full_email[300];
+        char full_email[600];
         sprintf(full_email, "%s@%s", pop3_username_sender, pop3_domain_sender);
         printf("|%-8d|%-60s|%-50s|%-60s|\n", mail_indices[i], full_email, pop3_timestamp, pop3_subject);
     }
@@ -1026,6 +1028,7 @@ int get_pop3_response() {
             break;
         }
     }
+    return response_code;
 }
 
 void send_pop3_command() {

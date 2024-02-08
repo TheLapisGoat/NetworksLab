@@ -11,7 +11,7 @@
 #include <ctype.h>
 
 int sockfd, newsockfd;
-int clilen;
+socklen_t clilen;
 int SERVERPORT;
 struct sockaddr_in cli_addr, serv_addr;
 
@@ -32,11 +32,11 @@ void pop3_quit();
 void delete_mails();
 
 int main(int argc, char * argv[]) {
-    int n;      //Number of bytes read
 
     //Checking for the correct number of arguments
     if (argc != 2) {
         printf("Incorrect number of arguments\n");
+        printf("Usage: ./popserver <port>\n");
         exit(0);
     }
     SERVERPORT = atoi(argv[1]);
@@ -166,10 +166,14 @@ void authorization() {  //Function that handles the pop3 authorization with the 
     char * username;
     username = (char*) malloc(100 * sizeof(char));
     char password[100];
-    memset(buffer, 0, sizeof(buffer));
-    memset(complete_line, 0, sizeof(complete_line));
-    memset(username, 0, sizeof(username));
-    memset(password, 0, sizeof(password));
+    int username_len = sizeof(username);
+    int password_len = sizeof(password);
+    int buffer_len = sizeof(buffer);
+    int complete_line_len = sizeof(complete_line);
+    memset(buffer, 0, buffer_len);
+    memset(complete_line, 0, complete_line_len);
+    memset(username, 0, username_len);
+    memset(password, 0, password_len);
 
     int state = 0;  //0: Expecting USER, 1: Expecting PASS
 
@@ -304,9 +308,7 @@ void transaction() {  //Function that handles the pop3 transaction with the clie
         }
 
         //Make the first 4 characters uppercase
-        for (int i = 0; i < 4; i++) {
-            complete_line[i] = toupper(complete_line[i]);
-        }
+        for (int i = 0; i < 4; i++) complete_line[i] = toupper(complete_line[i]);
 
         // Handle QUIT first
         if (strncmp(complete_line, "QUIT", 4) == 0) {
@@ -388,9 +390,7 @@ void transaction() {  //Function that handles the pop3 transaction with the clie
             if (strlen(complete_line) > 5) {    //LIST <msg_num>: return +OK followed by message number and size
                 int msg_num;
                 sscanf(complete_line, "LIST %d", &msg_num); //Extracting the message number from the command
-
-                // printf("msg_num: %d\n", msg_num);   //Debug
-                
+                // printf("msg_num: %d\n", msg_num);   //Debug                
                 //Checking if the message number does not refer to a message marked for deletion
                 int valid_msg = 1;
                 for (int i = 0; i < to_delete_count; i++) {
@@ -485,9 +485,7 @@ void transaction() {  //Function that handles the pop3 transaction with the clie
                 memset(complete_line, 0, sizeof(complete_line));
                 continue;
             }
-
             sscanf(complete_line, "RETR %d", &msg_num); //Extracting the message number from the command
-
             //Checking if the message number does not refer to a message marked for deletion
             int valid_msg = 1;
             for (int i = 0; i < to_delete_count; i++) {
@@ -497,12 +495,10 @@ void transaction() {  //Function that handles the pop3 transaction with the clie
                     break;
                 }
             }
-
             if (!valid_msg) {
                 memset(complete_line, 0, sizeof(complete_line));
                 continue;
             }
-
             //Getting a FILE* to the maildrop
             FILE * maildrop = fopen(maildrop_fname, "r");
 
@@ -528,13 +524,11 @@ void transaction() {  //Function that handles the pop3 transaction with the clie
                             memset(response, 0, sizeof(response));
                             strcpy(response, token);
                             strcat(response, "\r\n");
-                            int temp = send(newsockfd, response, strlen(response), 0);
+                            send(newsockfd, response, strlen(response), 0);
                             token = strtok(NULL, "\n");
                         }
-
                         //Sending the end of message marker
                         send(newsockfd, ".\r\n", strlen(".\r\n"), 0);
-
                         break;
                     } else {
                         memset(message, 0, sizeof(message));    //Resetting the message
@@ -543,9 +537,7 @@ void transaction() {  //Function that handles the pop3 transaction with the clie
                     strcat(message, line);  //Appending the line to the message
                 }
             }
-
             fclose(maildrop);   //Closing the maildrop
-
             if (!msg_found) {
                 send(newsockfd, "-ERR no such message\r\n", strlen("-ERR no such message\r\n"), 0);
             }
@@ -557,9 +549,7 @@ void transaction() {  //Function that handles the pop3 transaction with the clie
                 memset(complete_line, 0, sizeof(complete_line));
                 continue;
             }
-
             sscanf(complete_line, "DELE %d", &msg_num); //Extracting the message number from the command
-
             int valid_msg = 1;
             //Checking if the message number does not refer to a message marked for deletion
             for (int i = 0; i < to_delete_count; i++) {
@@ -569,7 +559,6 @@ void transaction() {  //Function that handles the pop3 transaction with the clie
                     break;
                 }
             }
-
             //Checking if the message number is valid
             if (msg_num > num_total_messages || msg_num < 1) {
                 send(newsockfd, "-ERR no such message\r\n", strlen("-ERR no such message\r\n"), 0);
