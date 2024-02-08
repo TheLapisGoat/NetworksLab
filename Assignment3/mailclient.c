@@ -17,7 +17,8 @@ int sockfd;                                                    //Socket file des
 char username[100];         //The argument of a command can be atmost 40 characters long, rfc 1939, pg 3
 char password[100];         //The argument of a command can be atmost 40 characters long, rfc 1939, pg 3 
 int mails_count;             //The maximum number of messages in a maildrop
-int maildrop_size;              //Size of the maildrop in octets, rfc 1939, pg 6 
+int maildrop_size;              //Size of the maildrop in octets, rfc 1939, pg 6
+int * mail_indices;             //Array to store the indices of the mails
 int pop3_mail_idx;              //Index of the mail in the maildrop
 int received_mail_size;         //Size of the mail in octets, rfc 1939, pg 7
 char pop3_username_sender[100];   //Upper limit of username (local part) is 64 bytes, rfc 5321, pg 63
@@ -27,7 +28,6 @@ char pop3_domain_recipient[300];           //Upper limit of domain is 255 bytes,
 char pop3_subject[100];           //Upper limit of subject is 50 bytes, assignment
 char pop3_timestamp[200];           //Timestamp of the mail
 char pop3_message[5000];          //Upper limit of message is 4000 bytes, assignment: You can assume that no single line in the message body has more than 80 characters and the maximum no. of lines in the message is 50.
-
 
 
 //Following variables are for Option 2: Send Mail
@@ -185,8 +185,8 @@ void get_smtp_response() {                         //Function to process the res
     int response_code = 0;      //Variable to store the response code
     int continue_reading = 1;
 
-    char complete_line[1024];          //Buffer to store a complete line of text (1001 characters is the limit of a text line in an email, rfc 821, Pg 43)
-    char buffer[1024];                 //Buffer to store the data (1001 characters is the limit of a text line in an email, rfc 821, Pg 43)
+    char complete_line[2048];          //Buffer to store a complete line of text (1001 characters is the limit of a text line in an email, rfc 821, Pg 43)
+    char buffer[2048];                 //Buffer to store the data (1001 characters is the limit of a text line in an email, rfc 821, Pg 43)
     memset(buffer, 0, sizeof(buffer));     //Setting the buffer to 0
     memset(complete_line, 0, sizeof(complete_line));     //Setting the buffer to 0
 
@@ -197,8 +197,17 @@ void get_smtp_response() {                         //Function to process the res
 
         if (line_end == NULL) {     //If the <CRLF> is not found
             strcat(complete_line, buffer);      //Append the buffer to the complete line
-            memset(buffer, 0, sizeof(buffer));     //Setting the buffer to 0
-            continue;       //Continue reading
+            //Looking for the <CRLF> in complete_line
+            line_end = strstr(complete_line, "\r\n");     //Finding the <CRLF>
+            if (line_end != NULL) {      //If the <CRLF> is found
+                //Moving complete_line back to buffer
+                memmove(buffer, complete_line, sizeof(complete_line));
+                memset(complete_line, 0, sizeof(complete_line));     //Setting the buffer to 0
+                line_end = strstr(buffer, "\r\n");     //Finding the <CRLF> in buffer again
+            } else {
+                memset(buffer, 0, sizeof(buffer));     //Setting the buffer to 0
+                continue;       //Continue reading
+            }
         }
 
         while (line_end != NULL) {      //If the <CRLF> is found
@@ -538,7 +547,7 @@ void manage_mail(char * server_ip, int pop3_port) {
     //Get the server greeting
     int greeted = get_pop3_greeted();
     if (!greeted) {
-        printf("Server did not greet\n"); fflush(stdout);             //debug
+        // printf("Server did not greet\n"); fflush(stdout);             //debug
         pop3_quit();
         return;
     }
@@ -546,15 +555,17 @@ void manage_mail(char * server_ip, int pop3_port) {
     //Do Authentication
     int authenticated = get_authenticated();
     if (!authenticated) {
-        printf("Authentication failed\n"); fflush(stdout);             //debug
+        // printf("Authentication failed\n"); fflush(stdout);             //debug
         pop3_quit();
         return;
     }
 
+    mail_indices = (int *) malloc(sizeof(int) * 1);      //Allocating memory for the array of mail indices
+
     while (1) {
         int displayed_pop3_menu = display_pop3_menu();    //Display the menu
         if (!displayed_pop3_menu) {
-            printf("Error in displaying the menu\n"); fflush(stdout);             //debug
+            // printf("Error in displaying the menu\n"); fflush(stdout);             //debug
             pop3_quit();
             return;
         }
@@ -572,11 +583,21 @@ void manage_mail(char * server_ip, int pop3_port) {
             if (choice == -1) {
                 pop3_quit();
                 return;
-            } else if (choice < 1 || choice > mails_count) {
-                printf("Mail no. out of range, give again\n");
-                continue;
-            } else {
+            }
+
+            //Check if the choice is a valid mail number
+            int valid_choice = 0;
+            for (int i = 0; i < mails_count; i++) {
+                if (mail_indices[i] == choice) {
+                    valid_choice = 1;
+                    break;
+                }
+            }
+
+            if (valid_choice) {
                 break;
+            } else {
+                printf("Mail no. out of range, give again\n");
             }
         }
 
@@ -586,7 +607,7 @@ void manage_mail(char * server_ip, int pop3_port) {
         send_pop3_command();
         int ret = get_pop3_response();
         if (ret != 1) {
-            printf("Error in getting the mail\n"); fflush(stdout);             //debug
+            // printf("Error in getting the mail\n"); fflush(stdout);             //debug
             pop3_quit();
             return;
         }
@@ -628,6 +649,7 @@ void manage_mail(char * server_ip, int pop3_port) {
 
         //Get Char
         char next_choice = getchar();
+        getchar();
 
         if (next_choice == 'd') {       //Delete the mail
             commd_state = 6;    //Send DELE
@@ -635,8 +657,10 @@ void manage_mail(char * server_ip, int pop3_port) {
             send_pop3_command();
             ret = get_pop3_response();
             if (ret != 1) {
-                printf("Error in deleting the mail (Mail is already marked for deletion)\n"); fflush(stdout);             //debug
+                printf("Error in deleting the mail\n"); fflush(stdout);
+                continue;
             }
+            printf("Deleted Mail No. %d\n", choice);
         }
     }
 }
@@ -669,21 +693,36 @@ int display_pop3_menu() { //Menu of form: Sl. No. <Sender’s email id> <When re
         return 0;
     }
 
-    //Creating aligned table headers of the given format
-    printf("Sl. No.\t\tSender's email id\t\tReceived: date : hour : minute\t\tSubject\n");
-    //Then, for each message, get the details and display them as they are received in the given format
-    for (int i = 1; i <= mails_count; i++) {
-        commd_state = 4;    //Send LIST
-        pop3_mail_idx = i;  //Set the mail index
-        send_pop3_command();
-        ret = get_pop3_response();
-        if (ret != 1) {
-            //This mail does not exist or is marked for deletion. Skip it. 
-            continue;
-        } 
+    //Next, updating the mail_indices array using LIST
+    //First, resetting mail_indices
+    mail_indices = (int *) realloc(mail_indices, sizeof(int) * mails_count);      //Allocating memory for the array of mail indices
+    memset(mail_indices, 0, sizeof(int) * mails_count);     //Setting the buffer to 0
 
+    //Now, getting the full Scan Listing, and using it to update mail_indices
+    commd_state = 4;    //Send LIST
+    pop3_mail_idx = 0;  //Set the mail index
+    send_pop3_command();
+    ret = get_pop3_response();
+    if (ret != 1) {
+        return 0;
+    }
+
+    //Creating aligned table headers of the given format
+    //Printing the top of the table
+    for (int i = 0; i < 183; i++) {
+        printf("-");
+    }
+    printf("\n");
+    printf("|%-8s|%-20s%-40s|%-10s%-40s|%-25s%-35s|\n", "Sl. No.", "", "Sender's email id", "", "Received: date : hour : minute", "", "Subject");
+    for (int i = 0; i < 183; i++) {
+        printf("-");
+    }
+    printf("\n");
+
+    //Then, for each mail, get the mail details and display them
+    for (int i = 0; i < mails_count; i++) {
         commd_state = 5;    //Send RETR
-        pop3_mail_idx = i;  //Set the mail index
+        pop3_mail_idx = mail_indices[i];  //Set the mail index
         send_pop3_command();
         ret = get_pop3_response();
         if (ret != 1) {
@@ -691,9 +730,20 @@ int display_pop3_menu() { //Menu of form: Sl. No. <Sender’s email id> <When re
         }
 
         //Display the mail
-        printf("%d\t\t%s@%s\t\t%s\t\t%s\n", i, pop3_username_sender, pop3_domain_sender, pop3_timestamp, pop3_subject);
+        char full_email[300];
+        sprintf(full_email, "%s@%s", pop3_username_sender, pop3_domain_sender);
+        printf("|%-8d|%-60s|%-50s|%-60s|\n", mail_indices[i], full_email, pop3_timestamp, pop3_subject);
     }
 
+    //If there are no mails, print a message
+    if (mails_count == 0) {
+        printf("|%-181s|\n", "No mails in the maildrop");
+    }
+    //Printing the bottom of the table
+    for (int i = 0; i < 183; i++) {
+        printf("-");
+    }
+    printf("\n");
     return 1;
 }
 
@@ -722,7 +772,7 @@ int get_pop3_response() {
 
     int response_code = 0;      //Variable to store the response code, 1: Positive response, 0: Negative response
 
-    char complete_line[600];          //Buffer to store a complete line of text (512 characters is the limit of a response, rfc 1939, Pg 3)
+    char complete_line[1050];          //Buffer to store a complete line of text (512 characters is the limit of a response, rfc 1939, Pg 3)
     char buffer[1024];                 //Buffer to store the data (512 characters is the limit of a response, rfc 1939, Pg 3)
     memset(buffer, 0, sizeof(buffer));     //Setting the buffer to 0
     memset(complete_line, 0, sizeof(complete_line));     //Setting the buffer to 0
@@ -730,26 +780,29 @@ int get_pop3_response() {
     //Read one line, this will be the first line of the response, containing the response code
     while (1) {
         int bytes_read = recv(sockfd, buffer, sizeof(buffer), 0);      //Reading from the socket
+        buffer[bytes_read] = '\0';      //Null terminating the buffer
 
-        char * line_end = strstr(buffer, "\r\n");     //Finding the <CRLF>
+        //Append the buffer to the complete line
+        strcat(complete_line, buffer);
 
-        printf("Line: %s\n", buffer); fflush(stdout);              //debug
+        char * line_end = strstr(complete_line, "\r\n");     //Finding the <CRLF>
 
         if (line_end == NULL) {     //If the <CRLF> is not found
-            strcat(complete_line, buffer);      //Append the buffer to the complete line
             memset(buffer, 0, sizeof(buffer));     //Setting the buffer to 0
             continue;       //Continue reading
         } else {
-            printf("Line: %s\n", buffer); fflush(stdout);              //debug
-            strncat(complete_line, buffer, line_end - buffer);      //Append the buffer to the complete line (excluding the <CRLF>)
-            memmove(buffer, line_end + 2, sizeof(buffer) - (line_end - buffer) - 2);    //Move the remaining data to the start of the buffer (without the leading <CRLF> from the previous line)
+            memset(buffer, 0, sizeof(buffer));     //Setting the buffer to 0
+            //Move the data to the right of the CRLF to the start of the buffer
+            memmove(buffer, line_end + 2, strlen(line_end) - 2);
+
+            //Remove the CRLF from the end of the line
+            complete_line[strlen(complete_line) - 2] = '\0';
             
             if (complete_line[0] == '+') {      //If the response is a positive response
                 response_code = 1;      //Positive response
             } else {
                 response_code = 0;      //Negative response
             }
-
             break;
         }
     }
@@ -757,63 +810,111 @@ int get_pop3_response() {
     switch (commd_state) {
         case 0: {      //Expecting a server greeting
             if (response_code == 1) {     //If the response is a positive response
-                printf("Server Greeting: %s\n", complete_line); fflush(stdout);              //debug
+                // printf("Server Greeting: %s\n", complete_line); fflush(stdout);              //debug
                 return 1;       //We have been greeted
             } else {     //If the response is a negative response
-                printf("Error in server greeting: %s\n", complete_line); fflush(stdout);              //debug
+                // printf("Error in server greeting: %s\n", complete_line); fflush(stdout);              //debug
                 return 0;       //We have not been greeted
             }
             break;
         }
         case 1: {       //Expecting a response to USER
-            printf("Hi");
-            fflush(stdout);
             if (response_code == 1) {     //If the response is a positive response
-                printf("User Accepted: %s\n", complete_line); fflush(stdout);              //debug
+                // printf("User Accepted: %s\n", complete_line); fflush(stdout);              //debug
                 return 1;
             } else {     //If the response is a negative response
-                printf("Error in user: %s\n", complete_line); fflush(stdout);              //debug
+                // printf("Error in user: %s\n", complete_line); fflush(stdout);              //debug
                 return 0;
             }
             break;
         }
         case 2: {       //Expecting a response to PASS
             if (response_code == 1) {     //If the response is a positive response
-                printf("Password Accepted: %s\n", complete_line); fflush(stdout);              //debug
+                // printf("Password Accepted: %s\n", complete_line); fflush(stdout);              //debug
                 return 1;
             } else {     //If the response is a negative response
-                printf("Error in password: %s\n", complete_line); fflush(stdout);              //debug
+                // printf("Error in password: %s\n", complete_line); fflush(stdout);              //debug
                 return 0;
             }
             break;
         }
         case 3: {       //Expecting a response to STAT, of the form +OK nn mm, rfc 1939, pg 6
             if (response_code == 1) {     //If the response is a positive response
-                printf("STAT: %s\n", complete_line); fflush(stdout);              //debug
+                // printf("STAT: %s\n", complete_line); fflush(stdout);              //debug
 
                 //Parsing the response
                 char * token = strtok(complete_line, " ");        //Extracting the first token (+OK)
                 token = strtok(NULL, " ");        //Extracting the second token (nn)
                 mails_count = atoi(token);        //Converting the token to an integer
-                printf("Number of mails: %d\n", mails_count); fflush(stdout);              //debug
+                // printf("Number of mails: %d\n", mails_count); fflush(stdout);              //debug
 
                 token = strtok(NULL, " ");        //Extracting the third token (mm)
                 maildrop_size = atoi(token);        //Converting the token to an integer
-                printf("Size of mails: %d\n", maildrop_size); fflush(stdout);              //debug
+                // printf("Size of mails: %d\n", maildrop_size); fflush(stdout);              //debug
 
                 return 1;
             } else {     //If the response is a negative response
-                printf("Error in STAT: %s\n", complete_line); fflush(stdout);              //debug
+                // printf("Error in STAT: %s\n", complete_line); fflush(stdout);              //debug
                 return 0;
             }
             break;
         }
         case 4: {       //Expecting a response to LIST, of the form +OK nn mm, rfc 1939, pg 6
-            if (pop3_mail_idx == 0) {   //If the mail index is 0, then the response will be multiline
-                
+            if (pop3_mail_idx == 0) {   //If the mail index is 0, then the response will be multiline, with each line of the form: nn mm
+                if (response_code == 1) {     //If the response is a positive response
+                    //Getting the indices of the mails
+                    int line_counter = 0;
+                    int stop_reading = 0;
+                    memset(complete_line, 0, sizeof(complete_line));     //Setting the buffer to 0
+                    do {
+                        strcat(complete_line, buffer);      //Append the buffer to the complete line
+                        char * line_end = strstr(complete_line, "\r\n");     //Finding the <CRLF>
+
+                        if (line_end != NULL) {
+                            //Move back the complete_line to buffer
+                            strcpy(buffer, complete_line);
+                            memset(complete_line, 0, sizeof(complete_line));     //Setting the buffer to 0
+                            line_end = strstr(buffer, "\r\n");     //Finding the <CRLF> again
+                        }
+
+                        while (line_end != NULL) {      //If the <CRLF> is found
+                            line_counter++;
+                            strncat(complete_line, buffer, line_end - buffer);      //Append the buffer to the complete line (excluding the <CRLF>)
+                            memmove(buffer, line_end + 2, sizeof(buffer) - (line_end - buffer) - 2);    //Move the remaining data to the start of the buffer
+
+                            //Checking if the line is the last line of the mail
+                            if (strcmp(complete_line, ".") == 0) {     //If the line is a fullstop
+                                stop_reading = 1;       //We have read the full message
+                                break;      //Break out of the loop
+                            }
+
+                            //Getting the mail index
+                            char * token = strtok(complete_line, " ");        //Extracting the first token (nn)
+                            mail_indices[line_counter - 1] = atoi(token);        //Converting the token to an integer
+
+                            // printf("Received: %s", complete_line); fflush(stdout);              //debug
+
+                            memset(complete_line, 0, sizeof(complete_line));     //Setting the buffer to 0
+                            line_end = strstr(buffer, "\r\n");     //Finding the next <CRLF>
+                        }
+
+                        if (stop_reading) {     //If we have read the full message
+                            break;      //Break out of the loop
+                        } else {
+                            int bytes_read = recv(sockfd, buffer, sizeof(buffer), 0);      //Reading from the socket
+                            buffer[bytes_read] = '\0';      //Null terminating the buffer
+                        }
+
+                    } while (1);
+
+                    return 1;
+                } else {     //If the response is a negative response
+                    // printf("Error in LIST: %s\n", complete_line); fflush(stdout);              //debug
+                    return 0;
+                }
             } else {    //If the mail index is not 0, then the response will be single line, corresponding to the mail index
                 if (response_code == 1) {     //If the response is a positive response
-                    printf("LIST: %s\n", complete_line); fflush(stdout);              //debug
+                    // printf("LIST: %s\n", complete_line); fflush(stdout);              //debug
 
                     //Parsing the response
                     char * token = strtok(complete_line, " ");        //Extracting the first token (+OK)
@@ -821,22 +922,23 @@ int get_pop3_response() {
                     token = strtok(NULL, " ");        //Extracting the third token (mm)
                     received_mail_size = atoi(token);        //Converting the token to an integer
 
-                    printf("Size of mail %d is %d\n", pop3_mail_idx, received_mail_size); fflush(stdout);              //debug
+                    // printf("Size of mail %d is %d\n", pop3_mail_idx, received_mail_size); fflush(stdout);              //debug
 
                     return 1;
                 } else {     //If the response is a negative response
-                    printf("Error in LIST: %s\n", complete_line); fflush(stdout);              //debug
+                    // printf("Error in LIST: %s\n", complete_line); fflush(stdout);              //debug
                     return 0;
                 }
             }
         }
         case 5: {       //Expecting a response to RETR, of the form +OK followed by a multiline message, rfc 1939, pg 8
             if (response_code == 1) {     //If the response is a positive response
-                printf("RETR: %s\n", complete_line); fflush(stdout);              //debug
+                // printf("RETR: %s\n", complete_line); fflush(stdout);              //debug
 
                 //Getting the rest of the mail
                 int line_counter = 0;
                 int stop_reading = 0;
+                memset(complete_line, 0, sizeof(complete_line));     //Setting the buffer to 0
                 memset(pop3_username_sender, 0, sizeof(pop3_username_sender));     //Setting the buffer to 0
                 memset(pop3_domain_sender, 0, sizeof(pop3_domain_sender));     //Setting the buffer to 0
                 memset(pop3_username_recipient, 0, sizeof(pop3_username_recipient));     //Setting the buffer to 0
@@ -845,7 +947,15 @@ int get_pop3_response() {
                 memset(pop3_timestamp, 0, sizeof(pop3_timestamp));     //Setting the buffer to 0
                 memset(pop3_message, 0, sizeof(pop3_message));     //Setting the buffer to 0
                 do {
-                    char * line_end = strstr(buffer, "\r\n");     //Finding the <CRLF>
+                    strcat(complete_line, buffer);      //Append the buffer to the complete line
+                    char * line_end = strstr(complete_line, "\r\n");     //Finding the <CRLF>
+
+                    if (line_end != NULL) {
+                        //Move back the complete_line to buffer
+                        strcpy(buffer, complete_line);
+                        memset(complete_line, 0, sizeof(complete_line));     //Setting the buffer to 0
+                        line_end = strstr(buffer, "\r\n");     //Finding the <CRLF> again
+                    }
 
                     while (line_end != NULL) {      //If the <CRLF> is found
                         line_counter++;
@@ -869,9 +979,11 @@ int get_pop3_response() {
                             sscanf(complete_line, "Subject: %100[^\n]", pop3_subject);          //Extracting the subject
                         } else if (line_counter == 4) {    //This is the Timestamp line
                             sscanf(complete_line, "Received: %100[^\n]", pop3_timestamp);          //Extracting the timestamp
-                        } else if (line_counter == 5) {    //This is the Message line
+                        } else if (line_counter >= 5) {    //This is the Message line
                             strcat(pop3_message, complete_line);          //Extracting the message and appending it to the message buffer
                         }
+
+                        // printf("Received: %s", complete_line); fflush(stdout);              //debug
 
                         memset(complete_line, 0, sizeof(complete_line));     //Setting the buffer to 0
                         line_end = strstr(buffer, "\r\n");     //Finding the next <CRLF>
@@ -881,33 +993,34 @@ int get_pop3_response() {
                         break;      //Break out of the loop
                     } else {
                         int bytes_read = recv(sockfd, buffer, sizeof(buffer), 0);      //Reading from the socket
+                        buffer[bytes_read] = '\0';      //Null terminating the buffer
                     }
 
                 } while (1);
 
                 return 1;
             } else {     //If the response is a negative response
-                printf("Error in RETR: %s\n", complete_line); fflush(stdout);              //debug
+                // printf("Error in RETR: %s\n", complete_line); fflush(stdout);              //debug
                 return 0;
             }
             break;
         }
         case 6: {       //Expecting a response to DELE, of the form +OK, rfc 1939, pg 9
             if (response_code == 1) {     //If the response is a positive response
-                printf("DELE: %s\n", complete_line); fflush(stdout);              //debug
+                // printf("DELE: %s\n", complete_line); fflush(stdout);              //debug
                 return 1;
             } else {     //If the response is a negative response
-                printf("Error in DELE: %s\n", complete_line); fflush(stdout);              //debug
+                // printf("Error in DELE: %s\n", complete_line); fflush(stdout);              //debug
                 return 0;
             }
             break;
         }
         case 7: {       //Expecting a response to QUIT, of the form +OK, rfc 1939, pg 10
             if (response_code == 1) {     //If the response is a positive response
-                printf("QUIT: %s\n", complete_line); fflush(stdout);              //debug
+                // printf("QUIT: %s\n", complete_line); fflush(stdout);              //debug
                 return 1;
             } else {     //If the response is a negative response
-                printf("Error in QUIT: %s\n", complete_line); fflush(stdout);              //debug
+                // printf("Error in QUIT: %s\n", complete_line); fflush(stdout);              //debug
                 return 0;
             }
             break;
@@ -922,7 +1035,7 @@ void send_pop3_command() {
     Each argument may be up to 40 characters long.*/
     switch (commd_state) {
         case 1: {       //Send USER, rfc 1939, pg 13
-            printf("Sending USER\n"); fflush(stdout);             //debug
+            // printf("Sending USER\n"); fflush(stdout);             //debug
 
             char pop3_msg[300];        //Buffer to store the command
             memset(pop3_msg, 0, sizeof(pop3_msg));     //Setting the buffer to 0
@@ -965,7 +1078,12 @@ void send_pop3_command() {
             char pop3_msg[300];        //Buffer to store the command
             
             sprintf(pop3_msg, "RETR %d\r\n", pop3_mail_idx);      //Command to send
+
+            // printf("pop3_msg: %s\n", pop3_msg); fflush(stdout);             //debug
+
             send(sockfd, pop3_msg, strlen(pop3_msg), 0);      //Sending the command
+
+            // printf("Sent RETR\n"); fflush(stdout);             //debug
 
             break;
         }
@@ -973,6 +1091,7 @@ void send_pop3_command() {
             char pop3_msg[300];        //Buffer to store the command
             
             sprintf(pop3_msg, "DELE %d\r\n", pop3_mail_idx);      //Command to send
+
             send(sockfd, pop3_msg, strlen(pop3_msg), 0);      //Sending the command
 
             break;

@@ -147,14 +147,13 @@ void get_command() {
             exit(0);
         }
 
+        //Append the buffer to the command buffer
+        strcat(command_line, temp_buff);
+
         //Check for <CRLF> in the buffer
-        char *commd_end = strstr(temp_buff, "\r\n");
-        if (commd_end != NULL) {    //Copy the command into the buffer (including the <CRLF>)
-            int commd_len = commd_end - temp_buff + 2;
-            strncat(command_line, temp_buff, commd_len);
+        char *commd_end = strstr(command_line, "\r\n");
+        if (commd_end != NULL) {    //Break if <CRLF> is found
             break;
-        } else { //Copy the entire buffer into the command buffer
-            strcat(command_line, temp_buff);
         }
     }
 
@@ -272,13 +271,18 @@ void get_mail_message() {
 
     while (1) {
         int bytes_read = recv(newsockfd, buffer, sizeof(buffer), 0);      //Reading from the socket
+        buffer[bytes_read] = '\0';      //Setting the last byte to 0
 
-        char * line_end = strstr(buffer, "\r\n");     //Finding the <CRLF>
+        //Append the buffer to the text line
+        strcat(text_line, buffer);
 
-        if (line_end == NULL) {     //If the <CRLF> is not found
-            strcat(text_line, buffer);      //Append the buffer to the text line
-            memset(buffer, 0, sizeof(buffer));     //Setting the buffer to 0
-            continue;       //Continue reading
+        char * line_end = strstr(text_line, "\r\n");     //Finding the <CRLF>
+
+        if (line_end != NULL) {     //If the <CRLF> is found
+            //Move text_line back to buffer
+            strcpy(buffer, text_line);
+            memset(text_line, 0, sizeof(text_line));
+            line_end = strstr(buffer, "\r\n");     //Finding the <CRLF> in buffer again
         }
 
         while (line_end != NULL) {      //If the <CRLF> is found
