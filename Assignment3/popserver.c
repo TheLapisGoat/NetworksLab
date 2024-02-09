@@ -15,7 +15,7 @@ socklen_t clilen;
 int SERVERPORT;
 struct sockaddr_in cli_addr, serv_addr;
 
-char usernames[100][100];       //Temporarily limiting the number of users to 100
+char usernames[100][100];       //Limiting the number of users to 100
 char passwords[100][100];  
 int numUsers;
 int authorized;
@@ -313,37 +313,6 @@ void transaction() {  //Function that handles the pop3 transaction with the clie
         // Handle QUIT first
         if (strncmp(complete_line, "QUIT", 4) == 0) {
             pop3_quit();
-            // // update the mailbox
-            // FILE* temp = fopen("temp.txt", "w");
-            // char line[1000];
-            // int count = 0;
-            // // TODO: wtf is this trash try to find a better way to do this
-            // while (fgets(line, sizeof(line), mailbox) != NULL) {
-            //     if(strncmp(line, ".\r\n", 3) == 0) count++;
-            //     // find if count is in to_delete
-            //     for (int i = 0; i < to_delete_count; i++) {
-            //         if (to_delete[i] == count) {
-            //             while (fgets(line, sizeof(line), mailbox) != NULL) {
-            //                 if (strncmp(line, ".\r\n", 3) == 0){
-            //                     count++;
-            //                     break;
-            //                 }
-            //             }
-            //             break;
-            //         }
-            //     }
-            // }
-            // fclose(mailbox);
-            // mailbox = fopen(mailbox_fname, "w");
-            // fclose(temp);
-            // temp = fopen("temp.txt", "r");
-            // while (fgets(line, sizeof(line), temp) != NULL) {
-            //     fprintf(mailbox, "%s", line);
-            // }
-            // fclose(temp);
-            // fclose(mailbox);
-            // free(to_delete);
-            // send(newsockfd, "+OK POP3 server signing off\r\n", sizeof("+OK POP3 server signing off\r\n"), 0);
         } else if (strncmp(complete_line, "STAT", 4) == 0) {
             // return +OK followed by number of messages and total size
             int msg_size = 0;
@@ -481,7 +450,7 @@ void transaction() {  //Function that handles the pop3 transaction with the clie
             int msg_num;
             
             if (strlen(complete_line) < 5) {
-                printf("-ERR no message number specified\r\n");
+                // printf("-ERR no message number specified\r\n");
                 memset(complete_line, 0, sizeof(complete_line));
                 continue;
             }
@@ -545,7 +514,7 @@ void transaction() {  //Function that handles the pop3 transaction with the clie
             int msg_num;
             
             if (strlen(complete_line) < 5) {
-                printf("-ERR no message number specified\r\n");
+                // printf("-ERR no message number specified\r\n");
                 memset(complete_line, 0, sizeof(complete_line));
                 continue;
             }
