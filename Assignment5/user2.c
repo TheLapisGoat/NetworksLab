@@ -8,7 +8,7 @@
 #define Port_2 8081
 
 int main () {
-    //User 1 will send a large file (100KB) to User 2: This file is the pdf of the Assignment Problem Statement
+    // User 2 will receive a large file (100KB) from User 1: This file is the pdf of the Assignment Problem Statement
     int domain = AF_INET;
     int type = SOCK_MTP;
     int protocol = 0;
@@ -17,63 +17,57 @@ int main () {
     int socket = m_socket(domain, type, protocol);
     if (socket == -1) {
         printf("Error in creating the socket\n");
-        return 0;
     } else {
         printf("Socket created successfully\n");
         printf("Socket ID: %d\n", socket);
     }
 
-    //Bind call
-    int ret = m_bind(socket, IP_1, Port_1, IP_2, Port_2);
+    // Bind call
+    int ret = m_bind(socket, IP_2, Port_2, IP_1, Port_1);
     if (ret == -1) {
         printf("Error in binding the socket\n");
-        return 0;
     } else {
         printf("Socket bound successfully\n");
     }
 
-    //Opening the pdf file
-    FILE *fp = fopen("SenderFiles/img1.jpg", "rb");
+    // Receiving the file
+    FILE *fp = fopen("ReceiverFiles/img1.jpg", "wb");
     if (fp == NULL) {
         printf("Error in opening the file\n");
-        return 0;
     } else {
         printf("File opened successfully\n");
     }
 
-    //Sending the file
     int msg_count = 0;
+    int misses = 0;
     char buffer[1024];
     int n;
-    struct sockaddr_in dest_addr;
-    dest_addr.sin_family = AF_INET;
-    dest_addr.sin_port = htons(Port_2);
-    dest_addr.sin_addr.s_addr = inet_addr(IP_2);
     while (1) {
-        n = fread(buffer, 1, 1024, fp);
-        if (n > 0) {
-            int ret;
-            //Sending the message
-            while ((ret = m_sendto(socket, buffer, n, 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr))) == -1) {
-                perror("Error");
-                sleep(1);
-            }
-            msg_count++;
-            printf("Message %d sent successfully\n", msg_count);
-            // printf("Message: %s\n", buffer);
-        } else {
-            // Sending a 32 byte delimiter to indicate the end of the file
-            char delimiter[33] = "0123456789ABCDEF0123456789ABCDEF";
-            int ret;
-            while ((ret = m_sendto(socket, delimiter, 32, 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr))) == -1) {
-                perror("Error");
-                sleep(1);
-            }
-            msg_count++;
-            printf("EOF delimiter sent successfully\n");
+        if (misses > 15) {
+            printf("Too many misses. Exiting\n");
             break;
         }
+        memset(buffer, 0, 1024);
+        n = m_recvfrom(socket, buffer, 1024, 0, NULL, NULL);
+        if (n > 0) {
+            // Checking if the received message is the delimiter
+            char delimiter[33] = "0123456789ABCDEF0123456789ABCDEF";
+            if (memcmp(buffer, delimiter, 32) == 0) {
+                printf("Delimiter received. Exiting\n");
+                break;
+            }
+            fwrite(buffer, 1, n, fp);
+            fflush(fp);
+            msg_count++;
+            misses = 0;
+            printf("Message %d received successfully\n", msg_count);
+        } else {
+            perror("Error");
+            misses++;
+            sleep(3);
+        }
     }
+
     printf("Waiting for 5 min, then closing the socket\n");
     fflush(stdout);
     sleep(300);

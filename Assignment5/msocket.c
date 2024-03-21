@@ -216,7 +216,7 @@ int m_bind(int sockfd, char * src_ip, int src_port, char * dst_ip, int dst_port)
     return 0;
 }
 
-ssize_t m_sendto(int sockfd, const void *buf, size_t len, const struct sockaddr *dest_addr, size_t addrlen) {
+ssize_t m_sendto(int sockfd, const void *buf, size_t len, int flags, const struct sockaddr *dest_addr, size_t addrlen) {
     //Checking if the socket id is valid
     if (sockfd < 0 || sockfd >= N) {
         return -1;
@@ -247,13 +247,15 @@ ssize_t m_sendto(int sockfd, const void *buf, size_t len, const struct sockaddr 
     }
     //Checking if the destination IP and port are same as the bound IP and port
     if (strcmp(SM[sockfd].opp_ip, dst_ip) != 0 || SM[sockfd].opp_port != dst_port) {
-        errno = ENOTBOUND;
+        errno = ENOTCONN;
         return -1;
     }
 
     sem_wait(send_mtx);
     //Looking for a free slot in the send buffer
     int send_free_slot = SM[sockfd].send_free_slot;
+    // printf("send_free_slot: %d\n", send_free_slot);
+    // fflush(stdout);
     if (send_free_slot == 10) {
         sem_post(send_mtx);
         errno = ENOBUFS;
@@ -266,14 +268,18 @@ ssize_t m_sendto(int sockfd, const void *buf, size_t len, const struct sockaddr 
         return -1;
     }
     //Copying the data to the send buffer 
+    memset(SM[sockfd].send_buffer[send_free_slot], 0, 1024);
     memcpy(SM[sockfd].send_buffer[send_free_slot], buf, len);
+    SM[sockfd].send_length[send_free_slot] = len;
+    // printf("Added msg at %d: %s\n", send_free_slot, SM[sockfd].send_buffer[send_free_slot]);
+    // fflush(stdout);
     SM[sockfd].send_free_slot++;
     sem_post(send_mtx);
 
     return len;
 }
 
-ssize_t m_recvfrom(int sockfd, void *buf, size_t len, struct sockaddr *src_addr, size_t *addrlen) {
+ssize_t m_recvfrom(int sockfd, void *buf, size_t len, int flags, struct sockaddr *src_addr, size_t *addrlen) {
     //Checking if the socket id is valid
     if (sockfd < 0 || sockfd >= N) {
         return -1;
@@ -299,26 +305,27 @@ ssize_t m_recvfrom(int sockfd, void *buf, size_t len, struct sockaddr *src_addr,
     }
 
     sem_wait(recv_mtx);
-    //Looking for a filled slot in the receive buffer
-    int i;
-    for (i = 0; i < 5; i++) {
-        if (SM[sockfd].recv_filled[i] == 1) {
-            break;
-        }
-    }
     //If no message is received
-    if (i == 5) {
+    if (SM[sockfd].recv_count == 0) {
         sem_post(recv_mtx);
         errno = ENOMSG;
         return -1;
     }
+    // printf("recv_count: %d\n", SM[sockfd].recv_count);
+    // fflush(stdout);
     //Copying the data from the receive buffer
     memset(buf, 0, len);
-    ssize_t cpy_len = len < 1024 ? len : 1024;
-    memcpy(buf, SM[sockfd].recv_buffer[i], cpy_len);
-    SM[sockfd].recv_filled[i] = 0;
+    int msg_len = SM[sockfd].recv_length[0];
+    ssize_t cpy_len = msg_len < len ? msg_len : len;
+    memcpy(buf, SM[sockfd].recv_buffer[0], cpy_len);
+    //Shifting the messages in the receive buffer
+    for (int i = 0; i < 4; i++) {
+        memset(SM[sockfd].recv_buffer[i], 0, 1024);
+        memcpy(SM[sockfd].recv_buffer[i], SM[sockfd].recv_buffer[i + 1], 1024);
+        SM[sockfd].recv_length[i] = SM[sockfd].recv_length[i + 1];
+    }
+    SM[sockfd].recv_count--;
     sem_post(recv_mtx);
-
     return cpy_len;
 }
 
@@ -405,10 +412,6 @@ int m_close(int sockfd) {
         return -1;
     }
 
-    sem_wait(shm_mtx);
-    memset(&SM[sock_id], 0, sizeof(struct msocket_t));
-    sem_post(shm_mtx);
-
     memset(sock_info, 0, sizeof(struct SOCK_INFO));
 
     sem_post(send_mtx);
@@ -418,3 +421,11 @@ int m_close(int sockfd) {
     return 0;
 }
 
+int dropMessage() {
+    //Generate random float between 0 and 1
+    float prob = (float) rand() / RAND_MAX;
+    if (prob < p) {
+        return 1;
+    }
+    return 0;
+}

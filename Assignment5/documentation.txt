@@ -1,0 +1,163 @@
+Structures:
+1. SOCK_INFO:
+    Is a shared memory structure used to store the information about the socket and pass is between the user program and the initmsocket program.
+    This data is used for creating, binding and deleting the socket. 
+
+    Fields:
+    - int sock_id       :       The socket id of the socket 
+    - char ip[32]       :       The ip address of the socket (Stored as a string)
+    - int port          :       The port number of the socket
+    - int errnum        :       The error number. Is used to pass the value of errno that may have been set due to an error in initmsocket to the user program.
+
+2. wnd_t:
+    Is a generic sliding window data structure used by the msocket_t structure for its sender and receiver windows
+
+    Fields:
+    - int size;                         :       The size of the window
+    - int base;                         :       The base of the window
+    - int next_seq_no;                  :       For sender window: The next free sequence number to be sent, For receiver window: The next sequence number expected
+    - int filled[16];                   :       Used to denote which slots in the window are filled
+    - struct timeval timeouts[16];      :       The time at which the packet was sent. Used for timeout calculations
+    - char msgs[16][1024];              :       The messages stored in the window
+    - int msg_len[16];                  :       The length of the messages stored in the window
+
+3. msocket_t:
+    Is a shared memory structure used to store the information about the socket created for the MTP protocol.
+    It is accessed by all threads of initmsocket.
+
+    Fields:
+    - int status;                       :       The status of the socket. 0: Not created, 1: Created       
+    - pid_t pid;                        :       The pid of the process that created the socket
+    - int udp_id;                       :       The id of the udp socket created by the socket
+    - char opp_ip[32];                  :       The ip address of the other end of the socket
+    - int opp_port;                     :       The port number of the other end of the socket
+    - char send_buffer[10][1024];       :       The send buffer of the socket
+    - int send_length[10];              :       The length of the messages in the send buffer
+    - int send_free_slot;               :       The next free slot in the send buffer
+    - char recv_buffer[5][1024];        :       The receive buffer of the socket
+    - int recv_length[5];               :       The length of the messages in the receive buffer
+    - int recv_count;                   :       The number of messages in the receive buffer
+    - int nospace;                      :       Flag to denote that there is no space in the receive buffer
+    - struct wnd_t swnd;                :       The sender window of the socket  
+    - struct wnd_t rwnd;                :       The receiver window of the socket
+
+Functions:
+1. int m_socket(int domain, int type, int protocol)
+    - Creates a socket by filling the SOCK_INFO structure and signalling the initmsocket program.
+    - Parameters:
+        - domain: The domain of the socket
+        - type: The type of the socket
+        - protocol: The protocol of the socket
+    - Returns:
+        - The socket id of the socket created
+
+2. int m_bind(int sockfd, char * src_ip, int src_port, char * dst_ip, int dst_port)
+    - Binds the socket to the src ip and port, and stores the destination ip and port in the msocket_t structure.
+    - Parameters:
+        - sockfd: The socket id of the socket
+        - src_ip: The source ip address
+        - src_port: The source port number
+        - dst_ip: The destination ip address
+        - dst_port: The destination port number
+    - Returns:
+        - 0 on success
+        - -1 on failure
+
+3. ssize_t m_sendto(int sockfd, const void *buf, size_t len, int flags, const struct sockaddr *dest_addr, size_t addrlen)
+    - Sends a message to the destination address. The message is stored in the send buffer of the socket.
+    - Expects the destination address to be the same as the one stored in the msocket_t structure.
+    - Is non blocking.
+    - Gives an error if send buffer is full
+    - Parameters:
+        - sockfd: The socket id of the socket
+        - buf: The message to be sent
+        - len: The length of the message
+        - flags: Flags for the sendto function (Is ignored)
+        - dest_addr: The destination address
+        - addrlen: The length of the destination address
+    - Returns:
+        - The number of bytes sent on success
+        - -1 on failure
+
+4. ssize_t m_recvfrom(int sockfd, void *buf, size_t len, int flags, struct sockaddr *src_addr, size_t *addrlen)
+    - Receives a message from the socket. Does this by extracting a message from the receive buffer of the socket.
+    - Is non blocking.
+    - Gives an error if there are no messages in the receive buffer.
+    - Parameters:
+        - sockfd: The socket id of the socket
+        - buf: The buffer to store the message
+        - len: The length of the buffer
+        - flags: Flags for the recvfrom function (Is ignored)
+        - src_addr: The source address of the message (Expected to be the same as the destination address stored in the msocket_t structure)
+        - addrlen: The length of the source address (Is ignored)
+    - Returns:
+        - The number of bytes received on success
+        - -1 on failure
+
+5. int m_close(int sockfd)
+    - Closes the socket by signalling the initmsocket program to delete the socket.
+    - Parameters:
+        - sockfd: The socket id of the socket
+    - Returns:
+        - 0 on success
+        - -1 on failure
+
+6. int dropMessage()
+    - Drops a message with a probability of p (Defined in the msocket.h file)
+    - Used to simulate packet loss
+    - Returns:
+        - 1 if the message is to be dropped
+        - 0 if the message is to be kept
+
+7. void * R_main(void * arg)
+    - The main function for the receiver thread
+    - Waits on a select call for a message to be received on the udp socket, or for the select timeout to occur (timeout value T specified in the msocket.h file)
+    - If a message is received, extracts the message and store it in the receive buffer of the socket
+    - If an ack is received, updates the sender window of the socket
+    - Parameters:
+        - arg: Pointer to the Shared Memory structure of the socket
+    - Returns:
+        - NULL
+
+8. void * S_main(void * arg)
+    - The main function for the sender thread
+    - Sleeps for a time period of T/2 (T specified in the msocket.h file)
+    - If the send buffer is not empty, sends the message in the send buffer to the destination address
+    - If a timeout occurs, resends the messages in the sender window
+    - Parameters:
+        - arg: Pointer to the Shared Memory structure of the socket
+    - Returns:
+        - NULL
+
+9. void * G_main(void * arg)
+    - The main function for the garbage collector thread
+    - Periodically checks if the owner processes of all sockets are alive, and deletes the socket if the owner process is dead
+    - Parameters:
+        - arg: Pointer to the Shared Memory structure of the socket
+    - Returns:
+        - NULL
+
+10. int main()
+    - The main function of the initmsocket program
+    - Creates the shared memory structures for the sockets as well as semaphores
+    - Creates the receiver, sender and garbage collector threads
+    - Waits for signals from the user program to create, bind, and close sockets
+    - Returns:
+        - 0 on success
+        - -1 on failure
+
+Table of Readings:
+____________________________________________________________
+|       P       |       Avg Transmissions Per Message      |
+|---------------|------------------------------------------|
+|     0.05      |                   2.31                   |
+|     0.10      |                   2.53                   |
+|     0.15      |                   2.79                   |
+|     0.20      |                   3.22                   |
+|     0.25      |                   3.82                   |
+|     0.30      |                   4.42                   |
+|     0.35      |                   4.57                   |
+|     0.40      |                   4.27                   |
+|     0.45      |                   4.56                   |
+|     0.50      |                   4.00                   |
+|_______________|__________________________________________|
