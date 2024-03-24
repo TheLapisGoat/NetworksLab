@@ -33,7 +33,7 @@ int main () {
     }
 
     //Opening the pdf file
-    FILE *fp = fopen("SenderFiles/img1.jpg", "rb");
+    FILE *fp = fopen("SenderFiles/img.jpg", "rb");
     if (fp == NULL) {
         printf("Error in opening the file\n");
         return 0;

@@ -31,7 +31,7 @@ int main () {
     }
 
     // Receiving the file
-    FILE *fp = fopen("ReceiverFiles/img1.jpg", "wb");
+    FILE *fp = fopen("ReceiverFiles/img.jpg", "wb");
     if (fp == NULL) {
         printf("Error in opening the file\n");
     } else {
@@ -39,14 +39,9 @@ int main () {
     }
 
     int msg_count = 0;
-    int misses = 0;
     char buffer[1024];
     int n;
     while (1) {
-        if (misses > 15) {
-            printf("Too many misses. Exiting\n");
-            break;
-        }
         memset(buffer, 0, 1024);
         n = m_recvfrom(socket, buffer, 1024, 0, NULL, NULL);
         if (n > 0) {
@@ -59,11 +54,9 @@ int main () {
             fwrite(buffer, 1, n, fp);
             fflush(fp);
             msg_count++;
-            misses = 0;
             printf("Message %d received successfully\n", msg_count);
         } else {
             perror("Error");
-            misses++;
             sleep(3);
         }
     }

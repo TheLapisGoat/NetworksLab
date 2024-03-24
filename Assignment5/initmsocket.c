@@ -503,7 +503,7 @@ void * G_main(void * arg) {
 
     while (1) {
         sleep(2 * T);
-        printf("G Thread: Woke up\n");
+        // printf("G Thread: Woke up\n");
         fflush(stdout);
 
         sem_wait(shm_mtx);
